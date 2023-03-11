@@ -1,0 +1,89 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Fr3d0C0rl30n3
+
+//@version=4
+study("Fr3d0's Volume Profile Visible Range", "VPVR", overlay=true, max_boxes_count=500)
+
+DEFAULT_COLOR = color.new(color.gray, 0)
+BORDER_COLOR = color.new(color.black, 80)
+BUY_COLOR = color.new(color.green, 0)
+SELL_COLOR = color.new(color.red, 0)
+TIME_UNIT = time - time[1]
+
+numOfBars = input(90, 'Number of bars', minval=14, maxval=365)
+rangeHigh = highest(high, numOfBars)
+rangeLow = lowest(low, numOfBars)
+rangeHeight = rangeHigh - rangeLow
+
+numOfHistograms = input(50, 'Number of histograms', minval=10, maxval=200)
+widestHistogramWidth = input(50, 'Width of the PoC', minval=20, maxval=100)
+histogramHeight = rangeHeight / numOfHistograms
+
+histogramLowList = array.new_float(numOfHistograms, na)
+histogramHighList = array.new_float(numOfHistograms, na)
+histogramPriceList = array.new_float(numOfHistograms, 0.0)
+
+histogramBuyVolumeList = array.new_float(numOfHistograms, 0.0)
+histogramSellVolumeList = array.new_float(numOfHistograms, 0.0)
+histogramVolumePercentageList = array.new_float(numOfHistograms, 0.0)
+
+if barstate.islast
+
+    // Define lows and highs of the histograms
+    for i = 0 to numOfHistograms - 1
+        histogramLow = rangeLow + histogramHeight * i
+        histogramHigh = rangeLow + histogramHeight * (i + 1)
+        array.set(histogramLowList, i, histogramLow)
+        array.set(histogramHighList, i, histogramHigh)
+        array.set(histogramPriceList, i, (histogramLow + histogramHigh) / 2)
+        
+    // Assign bar's volumes to histograms
+    for i = 0 to numOfBars - 1
+        currentBarHeight = high[i] - low[i]
+        currentBuyVolume = iff((high[i] == low[i]), 0, volume[i] * (close[i] - low[i]) / currentBarHeight)
+        currentSellVolume = iff((high[i] == low[i]), 0, volume[i] * (high[i] - close[i]) / currentBarHeight)
+        
+        // Define the percentages of the current volume to give to histograms
+        for j = 0 to numOfHistograms - 1
+            histogramLow = array.get(histogramLowList, j)
+            histogramHigh = array.get(histogramHighList, j)
+            target = max(histogramHigh, high[i]) - min(histogramLow, low[i])
+                   - (max(histogramHigh, high[i]) - min(histogramHigh, high[i]))
+                   - (max(histogramLow, low[i]) - min(histogramLow, low[i]))
+            histogramVolumePercentage = target / currentBarHeight
+            
+            histogramBuyVolume = array.get(histogramBuyVolumeList, j)
+            histogramSellVolume = array.get(histogramSellVolumeList, j)
+            
+            // If there is at least one histogram affected
+            // then divide the current volume by the number of histograms affected
+            if histogramVolumePercentage > 0
+                array.set(histogramBuyVolumeList, j, histogramBuyVolume + currentBuyVolume * histogramVolumePercentage)
+                array.set(histogramSellVolumeList, j, histogramSellVolume + currentSellVolume * histogramVolumePercentage)
+    
+    // Find the histogram with the highest volume
+    highestHistogramVolume = 0.0
+    for i = 0 to numOfHistograms - 1
+        histogramBuyVolume = array.get(histogramBuyVolumeList, i)
+        histogramSellVolume = array.get(histogramSellVolumeList, i)
+        histogramVolume = histogramBuyVolume + histogramSellVolume
+        highestHistogramVolume := max(highestHistogramVolume, histogramVolume)
+	
+	// Draw top and bottom of the range considered
+    line.new(time[numOfBars], rangeHigh, time_close, rangeHigh, xloc=xloc.bar_time, color=DEFAULT_COLOR, width = 2)
+    line.new(time[numOfBars], rangeLow, time_close, rangeLow, xloc=xloc.bar_time, color=DEFAULT_COLOR, width = 2)
+    
+    // Draw histograms and highlight the Point of Control
+    for i = 0 to numOfHistograms - 1
+        histogramLow = array.get(histogramLowList, i)
+        histogramHigh = array.get(histogramHighList, i)
+        histogramBuyVolume = array.get(histogramBuyVolumeList, i)
+        histogramSellVolume = array.get(histogramSellVolumeList, i)
+        histogramVolume = histogramBuyVolume + histogramSellVolume
+        histogramWidth = widestHistogramWidth * histogramVolume / highestHistogramVolume
+        histogramBuyWidth = floor(histogramWidth * histogramBuyVolume / histogramVolume)
+        histogramSellWidth = floor(histogramWidth * histogramSellVolume / histogramVolume)
+        
+        // Draw buy and send histograms
+        box.new(left=bar_index + 1, top=histogramHigh, right=bar_index + 1 + histogramBuyWidth, bottom=histogramLow, bgcolor=BUY_COLOR, border_color=BORDER_COLOR)
+        box.new(left=bar_index + 1 + histogramBuyWidth, top=histogramHigh, right=bar_index + 1 + histogramBuyWidth + histogramSellWidth, bottom=histogramLow, bgcolor=SELL_COLOR, border_color=BORDER_COLOR)
