@@ -1,0 +1,190 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Jesse.Lau
+
+
+
+
+//@version=5
+indicator(title="[JL] Supertrend Zone Pivot Point with zigzag fib", overlay=true,max_labels_count=500,max_bars_back = 4900)
+show_zigzag = input(true, "Show zigzag", group="Show")
+show_fib = input(true, "Show fibonacci", group="Show")
+show_supertrend = input(true, "Show supertrend", group="Show")
+show_premiumdiscount = input(true, "Show premium/discount line", group="Show")
+
+// Getting inputs
+atrPeriod = input(10, "ATR Length")
+factor = input.float(3, "Factor", step = 0.1)
+atrline = input.float(1.5, "Premium/Discount", step = 0.1)
+[supertrend, direction] = ta.supertrend(factor, atrPeriod)
+bodyMiddle = plot((open + close) / 2, display=display.none)
+upTrend = plot(direction < 0 and show_supertrend ? supertrend : na, "Up Trend", color = color.green, style=plot.style_linebr)
+downTrend = plot(direction > 0 and show_supertrend ? supertrend :na, "Down Trend", color = color.red, style=plot.style_linebr)
+
+fill(bodyMiddle, upTrend, show_supertrend ? color.new(color.green, 90):na, fillgaps=false)
+fill(bodyMiddle, downTrend,show_supertrend ?  color.new(color.red, 90):na, fillgaps=false)
+
+ATR = ta.atr(atrPeriod)
+upatrline =  supertrend + atrline*ATR 
+dnatrline = supertrend - atrline*ATR 
+
+plot(direction < 0 and show_premiumdiscount ? upatrline : na, "Up ATR", color = color.white, style=plot.style_linebr)
+plot(direction > 0 and show_premiumdiscount ? dnatrline : na, "Dn ATR", color = color.white, style=plot.style_linebr)
+
+
+
+
+colorGroupTitle = "Text Color / Label Color"
+
+textColorH = input(title="Pivot High", defval=color.white, inline="Pivot High", group=colorGroupTitle)
+labelColorH = input(title="", defval=color.red, inline="Pivot High", group=colorGroupTitle)
+
+textColorL = input(title="Pivot Low", defval=color.white, inline="Pivot Low", group=colorGroupTitle)
+labelColorL = input(title="", defval=color.green, inline="Pivot Low", group=colorGroupTitle)
+
+turnGreen = ta.change(direction) < 0
+turnRed   = ta.change(direction) > 0
+
+
+barsturngreen = bar_index - ta.valuewhen(turnGreen, bar_index, 0)
+barsturnred = bar_index - ta.valuewhen(turnRed, bar_index, 0)
+barsg = barsturngreen>0 ? barsturngreen : 1
+
+h1 = ta.highest(high,barsg)
+//plot(h1)
+barsr = barsturnred>0 ? barsturnred : 1
+
+
+l2 = ta.lowest(low,barsr) 
+//plot(l2)
+barsh = bar_index - ta.valuewhen(ta.change(h1),bar_index,0)
+barsl = bar_index - ta.valuewhen(ta.change(l2),bar_index,0)
+barsh2 = bar_index - ta.valuewhen(ta.change(h1),bar_index,1)
+barsl2 = bar_index - ta.valuewhen(ta.change(l2),bar_index,1)
+h1Index = 0
+l2Index = 0
+var label h1label = na
+var label l2label = na
+drawLabel(_offset, _pivot, _style, _color, _textColor) =>
+    if not na(_pivot)
+        label.new(bar_index-_offset, _pivot, str.tostring(_pivot, format.mintick), style=_style, color=_color, textcolor=_textColor)
+if turnRed
+    
+    
+    h1label:=drawLabel(barsh, h1, label.style_label_down, labelColorH, textColorH)
+    if show_zigzag
+        line.new(bar_index - barsh, h1, bar_index-barsl2, l2[1], width = 3, color=color.lime)
+
+if turnGreen
+    
+    
+    l2label:=drawLabel(barsl, l2, label.style_label_up, labelColorL, textColorL)
+    if show_zigzag
+        line.new(bar_index - barsh2, h1[1], bar_index-barsl, l2, width = 3,color = color.fuchsia)
+
+hh = ta.valuewhen(turnRed, h1, 0)
+ll = ta.valuewhen(turnGreen, l2, 0)
+
+
+
+
+mid_val = (hh + ll) / 2
+
+// Plot lines for highest high and lowest low
+var line hhLine = na
+var line llLine = na
+var line midline = na
+var label fibLabelh = na
+var label fibLabell = na
+var label fibLabelm = na
+var label fibLabel1 = na
+var label fibLabel2 = na
+var label fibLabel3 = na
+var label fibLabel4 = na
+var label fibLabel5 = na
+var label fibLabel6 = na
+var line fibLine1 = na
+var line fibLine2 = na
+var line fibLine3 = na
+var line fibLine4 = na
+var line fibLine5 = na
+var line fibLine6 = na
+if barstate.islast and show_fib
+    while high[h1Index] != h1[1]
+        h1Index := h1Index + 1
+
+    while low[l2Index] != l2[1] 
+        l2Index := l2Index + 1
+
+    n = math.max(h1Index,l2Index)
+    if not na(hhLine)
+        line.delete(hhLine)
+    if not na(llLine)
+        line.delete(llLine)
+    if not na(midline)
+        line.delete(midline)
+    if not na(fibLabelh)
+        label.delete(fibLabelh)
+    if not na(fibLabell)
+        label.delete(fibLabell)
+    
+    if not na(fibLabelm)
+        label.delete(fibLabelm)
+    if not na(fibLabel1)
+        label.delete(fibLabel1) 
+    if not na(fibLabel2)
+        label.delete(fibLabel2)
+    if not na(fibLabel3)
+        label.delete(fibLabel3)
+
+    if not na(fibLabel4)
+        label.delete(fibLabel4)
+    if not na(fibLabel5)
+        label.delete(fibLabel5)
+
+    if not na(fibLabel6)
+        label.delete(fibLabel6)
+    if not na(fibLine1)
+        line.delete(fibLine1)
+    if not na(fibLine2)
+        line.delete(fibLine2)
+    if not na(fibLine3)
+        line.delete(fibLine3)
+    if not na(fibLine4)
+        line.delete(fibLine4)
+    if not na(fibLine5)
+        line.delete(fibLine5)
+    if not na(fibLine6)
+        line.delete(fibLine6)
+    hhLine := line.new(x1=bar_index-n+1, y1=hh, x2=bar_index, y2=hh, color=color.purple, width=1)
+    fibLabelh := label.new(x=bar_index + 10, y=hh , text="1("+str.tostring(hh )+")", style = label.style_none,xloc=xloc.bar_index, yloc=yloc.price, color=color.white, textcolor=color.gray)
+
+    llLine := line.new(x1=bar_index-n+1, y1=ll, x2=bar_index, y2=ll, color=color.purple, width=1)
+    fibLabell := label.new(x=bar_index + 10, y=ll , text="0("+str.tostring(ll )+")", style = label.style_none,xloc=xloc.bar_index, yloc=yloc.price, color=color.white, textcolor=color.gray)
+
+    midline := line.new(bar_index-n+1, mid_val, bar_index, mid_val, color=color.purple, width=1)
+    fibLabelm := label.new(x=bar_index + 10, y=mid_val , text="0.5("+str.tostring(mid_val )+")", style = label.style_none,xloc=xloc.bar_index, yloc=yloc.price, color=color.white, textcolor=color.gray)
+
+    fibLabel1 := label.new(x=bar_index + 10, y=ll + 0.236*(hh-ll), text="0.236("+str.tostring(ll + 0.236*(hh-ll),"#.####")+")", style = label.style_none,xloc=xloc.bar_index, yloc=yloc.price, color=color.white, textcolor=color.gray)
+    
+    fibLine1 := line.new(x1 = bar_index-n+1,y1 = ll + 0.236*(hh-ll),x2 = bar_index,y2 = ll + 0.236*(hh-ll),color = color.purple,width = 1)
+
+    fibLabel2 := label.new(x=bar_index + 10, y=ll + 0.382*(hh-ll), text="0.382("+str.tostring(ll + 0.382*(hh-ll),"#.####")+")", style = label.style_none,xloc=xloc.bar_index, yloc=yloc.price, color=color.white, textcolor=color.gray)
+    
+    fibLine2 := line.new(x1 = bar_index-n+1,y1 = ll + 0.382*(hh-ll),x2 = bar_index,y2 = ll + 0.382*(hh-ll),color = color.purple,width = 1)
+
+    fibLabel3 := label.new(x=bar_index + 10, y=ll + 0.618*(hh-ll), text="0.618("+str.tostring(ll + 0.618*(hh-ll),"#.####")+")", style = label.style_none,xloc=xloc.bar_index, yloc=yloc.price, color=color.white, textcolor=color.gray)
+    
+    fibLine3 := line.new(x1 = bar_index-n+1,y1 = ll + 0.618*(hh-ll),x2 = bar_index,y2 = ll + 0.618*(hh-ll),color = color.purple,width = 1)
+
+    fibLabel4 := label.new(x=bar_index + 10, y=ll + 0.786*(hh-ll), text="0.786("+str.tostring(ll + 0.786*(hh-ll),"#.####")+")", style = label.style_none,xloc=xloc.bar_index, yloc=yloc.price, color=color.white, textcolor=color.gray)
+    
+    fibLine4 := line.new(x1 = bar_index-n+1,y1 = ll + 0.786*(hh-ll),x2 = bar_index,y2 = ll + 0.786*(hh-ll),color = color.purple,width = 1)
+
+    if close>supertrend
+        fibLabel5 := label.new(x=bar_index + 10, y=ll + 1.618*(hh-ll), text="1.618("+str.tostring(ll + 1.618*(hh-ll),"#.####")+")", style = label.style_none,xloc=xloc.bar_index, yloc=yloc.price, color=color.white, textcolor=color.gray)
+        
+        fibLine5 := line.new(x1 = bar_index-n+1,y1 = ll + 1.618*(hh-ll),x2 = bar_index,y2 = ll + 1.618*(hh-ll),color = color.purple,width = 1)
+    if close<supertrend
+        fibLabel6 := label.new(x=bar_index + 10, y=ll - 0.618*(hh-ll), text="-1.618("+str.tostring(ll - 0.618*(hh-ll),"#.####")+")", style = label.style_none,xloc=xloc.bar_index, yloc=yloc.price, color=color.white, textcolor=color.gray)
+        
+        fibLine6 := line.new(x1 = bar_index-n+1,y1 = ll - 0.618*(hh-ll),x2 = bar_index,y2 = ll - 0.618*(hh-ll),color = color.purple,width = 1)

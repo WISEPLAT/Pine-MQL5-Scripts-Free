@@ -1,0 +1,141 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © HeWhoMustNotBeNamed
+
+//@version=4
+study("ZigZag Channel", shorttitle="ZZ-DC", overlay=true, max_lines_count=500, max_labels_count=500)
+source=input(close)
+Length = input(5, minval=0, step=5)
+DeviationThreshold = 0
+showPivots = input(false)
+showRatios = input(false)
+showZigzag = input(false)
+showChannel = input(true)
+bullishColor = input(color.green)
+bullTrapColor = input(color.orange)
+bearishColor = input(color.red)
+bearTrapColor = input(color.lime)
+highLowLength = input(5, step=1, minval=2)
+waitForConfirmation = input(true)
+
+var zigzaglines = array.new_line(0)
+var zigzaglabels = array.new_label(0)
+var zigzagdir = array.new_int(0)
+var zigzagratios = array.new_float(0)
+var zigzagpivots = array.new_float(0)
+int max_array_size = highLowLength
+
+pivots(length, highSource, lowSource)=>
+    float ph = highestbars(highSource, length) == 0 ? highSource : na
+    float pl = lowestbars(lowSource, length) == 0 ? lowSource : na
+    dir = 0
+    dir := iff(ph and na(pl), 1, iff(pl and na(ph), -1, dir[1]))
+    [dir, ph, pl]
+
+get_edir(dir, y2)=>
+    eDir = dir
+    if(array.size(zigzaglines) > 0)
+        lastLine = array.get(zigzaglines, 0)
+        lastPivot = line.get_y1(lastLine)
+        eDir := (dir*y2 > dir*lastPivot? 2 : 1) * dir
+    lineColor = eDir == 2? bullishColor : eDir == 1? bullTrapColor : eDir == -1? bearTrapColor : bearishColor
+    [eDir, lineColor]
+
+add_to_zigzaglines(x1, y1 , x2, y2, dir)=>
+    [eDir, lineColor] = get_edir(dir, y2)
+    zgColor = showZigzag? lineColor : color.new(#FFFFFF, 100)
+    zline = line.new(x1=x1, y1=y1, 
+         x2 = x2, y2=y2,
+         color=zgColor, width=2, style=line.style_solid)
+    array.unshift(zigzaglines, zline)
+
+add_to_zigzaglabels(x1, x2, y1, y2, dir)=>
+    [eDir, lineColor] = get_edir(dir, y2)
+    pivotLabel = eDir == 2? "HH" : eDir == 1? "LH" : eDir == -1? "HL" : "LL"
+    lastLineLen = 0.0
+    currentLineLen = abs(y2-y1)
+    if(array.size(zigzaglines) > 0)
+        lastLine = array.get(zigzaglines, 0)
+        lastLineLen := abs(line.get_y2(lastLine) - line.get_y1(lastLine))
+
+    ratio = round(lastLineLen != 0 ? currentLineLen/lastLineLen : 0, 3)
+    labelText = (showPivots ? pivotLabel : "") +
+                         (showPivots and showRatios ? " - " : "") +
+                         (showRatios ? tostring(ratio) : "")
+    yloc = yloc.price
+    labelStyle = dir > 0? label.style_label_down : label.style_label_up
+    labelSize = showRatios and showPivots? size.normal : size.small
+    zlabel = label.new(x=x2, y=y2, text=labelText, xloc = xloc.bar_index, yloc = yloc, 
+                     color=lineColor, size=labelSize, style=labelStyle)
+    if(not showRatios and not showPivots)
+        label.delete(zlabel)
+    array.unshift(zigzaglabels,zlabel)
+    array.unshift(zigzagdir, eDir)
+    array.unshift(zigzagratios, ratio)
+
+add_to_zigzag(dir, dirchanged, ph, pl, index, highSource, lowSource)=>
+    value = (dir == 1? ph : pl)
+
+    y1= dir == 1? lowest(lowSource, Length) : highest(highSource, Length)
+    x1 = bar_index + (dir == 1? lowestbars(lowSource, Length) : highestbars(highSource,Length))
+    x2 = index
+    y2 = value
+    skip = false
+    if(array.size(zigzaglines) > 0)
+        lastLine = array.get(zigzaglines, 0)
+        lastValue = line.get_y2(lastLine)
+        lastIndex = line.get_x2(lastLine)
+        
+        if(not dirchanged)
+            if(dir == 1 and value < lastValue) or (dir == -1 and value > lastValue)
+                skip := true
+            else
+                line.delete(array.shift(zigzaglines))
+                label.delete(array.shift(zigzaglabels))
+                array.shift(zigzagdir)
+                array.shift(zigzagratios)
+        if(array.size(zigzaglines) > 0)
+            lastLine = array.get(zigzaglines, 0)
+            lastValue = line.get_y2(lastLine)
+            lastIndex = line.get_x2(lastLine)
+            x1 := lastIndex
+            y1 := lastValue
+
+    outsideDeviationThreshold = ((abs(y1-y2)*100/y1) > DeviationThreshold)
+    if(outsideDeviationThreshold and not skip)
+        add_to_zigzaglabels(x1, x2, y1, y2, dir)
+        add_to_zigzaglines(x1, y1 , x2, y2, dir)
+    if array.size(zigzaglines) > max_array_size
+        array.pop(zigzaglines)
+        array.pop(zigzaglabels)
+        array.pop(zigzagdir)
+        array.pop(zigzagratios)
+
+zigzag(length, DeviationThreshold, highSource, lowSource)=>
+    [dir, ph, pl] = pivots(length, highSource, lowSource)
+    dirchanged = change(dir)
+    if(ph or pl)
+        add_to_zigzag(dir, dirchanged, ph, pl, bar_index, highSource, lowSource)
+
+highSource = source == close? high : source
+lowSource = source == close? low : source
+
+zigzag(Length, DeviationThreshold, highSource, lowSource)
+array.clear(zigzagpivots)
+startIndex = waitForConfirmation? 1 : 0
+if(array.size(zigzaglines) > startIndex)
+    for i=startIndex to array.size(zigzaglines)-1
+        zgLine = array.get(zigzaglines, i)
+        y1 = line.get_y1(zgLine)
+        y2 = line.get_y2(zgLine)
+        array.unshift(zigzagpivots,y1)
+        array.unshift(zigzagpivots,y2)
+    
+top = array.max(zigzagpivots)
+bottom = array.min(zigzagpivots)
+middle = (top+bottom)/2
+
+DCU = plot(showChannel?top:na, title="Upper", color=color.green, linewidth=1, transp=50, style=plot.style_linebr)
+DCM = plot(showChannel?middle:na, title="Middle", color=color.maroon, linewidth=1, transp=50, style=plot.style_linebr)
+DCL = plot(showChannel?bottom:na, title="Lower", color=color.red, linewidth=1, transp=50, style=plot.style_linebr)
+fill(DCU, DCM, title="Upper", color=color.green, transp=90)
+fill(DCM, DCL, title="Lower", color=color.red, transp=90)

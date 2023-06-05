@@ -1,0 +1,82 @@
+// Moving Average Zig Zag © 2022 by DeltaSeek is licensed under Attribution-NonCommercial-NoDerivatives 4.0 International
+// @version=5
+indicator("Moving Average Based Zig Zag", "Moving Average Based Zig Zag", true, max_lines_count = 500)
+
+// CONSTANTS
+// Colors
+color       RED_L           = #f1948a
+color       RED_M           = #e74c3c
+color       RED_D           = #b03a2e
+color       ORANGE_L        = #f0b27a
+color       ORANGE_M        = #e67e22
+color       ORANGE_D        = #af601a
+color       YELLOW_L        = #f7dc6f
+color       YELLOW_M        = #f1c40f
+color       YELLOW_D        = #b7950b
+color       GREEN_L         = #7dcea0
+color       GREEN_M         = #27ae60
+color       GREEN_D         = #1e8449
+color       BLUE_L          = #85c1e9
+color       BLUE_M          = #3498db
+color       BLUE_D          = #2874a6
+color       PURPLE_L        = #bb8fce
+color       PURPLE_M        = #8e44ad
+color       PURPLE_D        = #6c3483
+color       GRAY_L          = #787b86
+color       GRAY_M          = #434651
+color       GRAY_D          = #131722
+color       WHITE           = #ffffff
+color       BLACK           = #000000
+color       CLEAR           = #ffffff00
+
+// Settings Organization
+string      emSpace         = " " //   1 Width
+string      fourSpace       = " " // 1/4 Width
+string      sixSpace        = " " // 1/6 Width
+
+// INPUTS
+string      pivotSource     = input.string      ("High / Low",      "Source",                       ["Open / Close", "High / Low"],                                 tooltip="",                 inline="",  group="")
+int         maLength        = input.int         (15,                "Moving Average Length",        1, 9999, 1,                                                     tooltip="",                 inline="",  group="")
+
+string      lineStyle       = input.string      ("Solid",           "Line Style",                   ["Solid", "Dotted", "Dashed"],                                  tooltip="",                 inline="",  group="Appearance")
+int         lineWidth       = input.int         (2,                 "Line Width",                   1, 10, 1,                                                       tooltip="",                 inline="",  group="Appearance")
+color       upColor         = input.color       (GREEN_M,           "Color           ",                                                                             tooltip="",                 inline="0", group="Appearance")
+color       dnColor         = input.color       (RED_M,             "",                                                                                             tooltip="",                 inline="0", group="Appearance")
+
+// FUNCTIONS
+// @function    Volume Weighted Hull Moving Average
+// @param       src     Float   price source
+// @param       vol     Float   volume
+// @param       len     Int     hull moving average length
+// @returns     vwhma
+vwhma(src, vol, len) => 
+    p = ta.hma(src * vol, len)
+    v = ta.hma(vol      , len)
+    vwhma = p / v
+
+// CALCULATIONS
+var         zigMat          = matrix.new<float>(0, 3)
+[maSource, hi, lo]          = switch pivotSource
+    "High / Low"   => [hl2               , high                 , low]
+    "Open / Close" => [(open + close) / 2, math.max(open, close), math.min(open, close)]
+ma                          = vwhma(maSource, volume, maLength)
+maPd                        = ta.pivothigh(ma, 1, 1)
+maPu                        = ta.pivotlow (ma, 1, 1)
+lookback                    = int(matrix.rows(zigMat) == 0 ? 1 : bar_index - matrix.get(zigMat, matrix.rows(zigMat) - 1, 0))
+highest                     = ta.highest(hi, lookback)
+lowest                      = ta.lowest (lo, lookback)
+highestIndex                = bar_index + ta.highestbars(hi, lookback)
+lowestIndex                 = bar_index + ta.lowestbars (lo, lookback)
+switch
+    maPd => matrix.add_row(zigMat, matrix.rows(zigMat), array.from(highestIndex, highest, lookback))
+    maPu => matrix.add_row(zigMat, matrix.rows(zigMat), array.from(lowestIndex , lowest , lookback))
+
+// PLOTS
+// Moving Average
+plot(ma,        "Moving Average", BLUE_M  , 1, plot.style_line, false, 0, 0, false, true, 999999, display.none)
+
+// Zig Zag
+if matrix.rows(zigMat) > 1 and (maPd or maPu)
+    line.new(int(matrix.get(zigMat, matrix.rows(zigMat) - 1, 0)), matrix.get(zigMat, matrix.rows(zigMat) - 1, 1),
+             int(matrix.get(zigMat, matrix.rows(zigMat) - 2, 0)), matrix.get(zigMat, matrix.rows(zigMat) - 2, 1),
+             xloc.bar_index, extend.none, maPd ? upColor : dnColor, lineStyle == "Solid" ? line.style_solid : lineStyle == "Dotted" ? line.style_dotted : line.style_dashed, lineWidth)

@@ -1,0 +1,527 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ralagh
+
+//@version=4
+
+study("PharshK RSI and Zigzag with H/L", overlay=true)
+lb = input(5, title="Left Bars", minval = 1)
+rb = input(5, title="Right Bars", minval = 1)
+showsupres = input(true, title="Support/Resistance", inline = "srcol")
+supcol = input(color.lime, title ="", inline = "srcol")
+rescol = input(color.red, title ="", inline = "srcol")
+srlinestyle = input(line.style_dotted, title = "Line Style/Width", options = [line.style_solid, line.style_dashed, line.style_dotted], inline ="style")
+srlinewidth = input(3, title = "", minval = 1, maxval = 5, inline ="style")
+changebarcol = input(true, title="Change Bar Color", inline = "bcol")
+bcolup = input(color.blue, title ="", inline = "bcol")
+bcoldn = input(color.black, title ="", inline = "bcol")
+
+ph = pivothigh(lb, rb)
+pl = pivotlow(lb, rb)
+
+hl = iff(ph, 1, iff(pl, -1, na)) // Trend direction
+zz = iff(ph, ph, iff(pl, pl, na)) // similar to zigzag but may have multiple highs/lows
+zz :=iff(pl and hl == -1 and valuewhen(hl, hl, 1) == -1 and pl > valuewhen(zz, zz, 1), na, zz)
+zz :=iff(ph and hl == 1  and valuewhen(hl, hl, 1) == 1  and ph < valuewhen(zz, zz, 1), na, zz)
+
+hl := iff(hl==-1 and valuewhen(hl, hl, 1)==1 and zz > valuewhen(zz, zz, 1), na, hl)
+hl := iff(hl==1 and valuewhen(hl, hl, 1)==-1 and zz < valuewhen(zz, zz, 1), na, hl)
+zz := iff(na(hl), na, zz)
+
+findprevious()=>  // finds previous three points (b, c, d, e)
+    ehl = iff(hl==1, -1, 1)
+    loc1 = 0.0, loc2 = 0.0, loc3 = 0.0, loc4 = 0.0
+    xx = 0
+    for x=1 to 1000
+        if hl[x]==ehl and not na(zz[x])
+            loc1 := zz[x]
+            xx := x + 1
+            break
+    ehl := hl
+    for x=xx to 1000
+        if hl[x]==ehl and not na(zz[x])
+            loc2 := zz[x]
+            xx := x + 1
+            break
+    ehl := iff(hl==1, -1, 1)
+    for x=xx to 1000
+        if hl[x]==ehl and not na(zz[x])
+            loc3 := zz[x]
+            xx := x + 1
+            break
+    ehl := hl
+    for x=xx to 1000
+        if hl[x]==ehl and not na(zz[x])
+            loc4 := zz[x]
+            break
+    [loc1, loc2, loc3, loc4]
+
+float f = na, float g = na, float h = na, float j = na, float k = na
+if not na(hl)
+    [loc1, loc2, loc3, loc4] = findprevious()
+    f := zz 
+    g := loc1
+    h := loc2
+    j := loc3
+    k := loc4
+
+_hh = zz and (f > g and f > h and h > g and h > j)
+_ll = zz and (f < g and f < h and h < g and h < j)
+_hl = zz and ((f >= h and (g > h and g > j and j > h and j > k)) or (f < g and f > h and g < j))
+_lh = zz and ((f <= h and (g < h and g < j and j < h and j < k)) or (f > g and f < h and g > j))
+
+plotshape(_hl, text="HL", title="Higher Low", style=shape.labelup, color=color.lime, textcolor=color.black, location=location.belowbar, offset = -rb)
+plotshape(_hh, text="HH", title="Higher High", style=shape.labeldown, color=color.lime, textcolor=color.black, location=location.abovebar, offset = -rb)
+plotshape(_ll, text="LL", title="Lower Low", style=shape.labelup, color=color.red, textcolor=color.white, location=location.belowbar, offset = -rb)
+plotshape(_lh, text="LH", title="Lower High", style=shape.labeldown, color=color.red, textcolor=color.white, location=location.abovebar, offset = -rb)
+
+float res = na, float sup = na
+res := iff(_lh, zz, res[1])
+sup := iff(_hl, zz, sup[1])
+
+int trend = na
+trend := iff(close > res, 1, iff(close < sup, -1, nz(trend[1])))
+
+res := iff((trend == 1 and _hh) or (trend == -1 and _lh), zz, res)
+sup := iff((trend == 1 and _hl) or (trend == -1 and _ll), zz, sup)
+rechange = res != res[1]
+suchange = sup != sup[1]
+
+var line resline = na
+var line supline = na
+if showsupres
+    if rechange
+        line.set_x2(resline, bar_index)
+        line.set_extend(resline, extend = extend.none)
+        resline := line.new(x1 = bar_index - rb, y1 = res, x2 = bar_index, y2 = res, color = rescol, extend = extend.right, style = srlinestyle, width = srlinewidth)
+     
+    if suchange
+        line.set_x2(supline, bar_index)
+        line.set_extend(supline, extend = extend.none)
+        supline := line.new(x1 = bar_index - rb, y1 = sup, x2 = bar_index, y2 = sup, color = supcol, extend = extend.right, style = srlinestyle, width = srlinewidth)    
+
+barcolor(color = iff(changebarcol, iff(trend == 1, bcolup, bcoldn), na))
+
+
+
+alert_strings = array.new_string(4)
+array.set(alert_strings, 0, "")
+array.set(alert_strings, 1, "")
+array.set(alert_strings, 2, "")
+array.set(alert_strings, 3, "")
+
+table_row_count = array.new_int(3)
+array.set(table_row_count, 0, 1)
+array.set(table_row_count, 1, 1)
+array.set(table_row_count, 2, 1)
+
+var UpTabl = table.new(position = position.top_center, columns = 3, rows = 20, bgcolor = color.rgb(255,255,255), border_width = 2, frame_color= color.black, frame_width = 2)
+var DnTabl = table.new(position = position.bottom_center, columns = 3, rows = 20, bgcolor = color.rgb(255,255,255), border_width = 2, frame_color= color.black, frame_width = 2)
+
+//table.cell(table_id = UpTabl, column = 1, row = 0, text = "Upper Channel Break")
+//table.cell(table_id = DnTabl, column = 1, row = 0, text = "Lower Channel Break") 
+//table.cell(table_id = UpTabl, column = 2, row = 0, text = "▲▲")
+//table.cell(table_id = DnTabl, column = 2, row = 0, text = "▼▼") 
+
+//table.cell(table_id = UpTabl, column = 0, row = 1, text = "Ticker")
+//table.cell(table_id = UpTabl, column = 1, row = 1, text = "Close")
+//table.cell(table_id = UpTabl, column = 2, row = 1, text = "High") 
+
+//table.cell(table_id = DnTabl, column = 0, row = 1, text = "Ticker")
+//table.cell(table_id = DnTabl, column = 1, row = 1, text = "Close") 
+//table.cell(table_id = DnTabl, column = 2, row = 1, text = "Low") 
+
+devTooltip = "Deviation is a multiplier that affects how much the price should deviate from the previous pivot in order for the bar to become a new pivot."
+depthTooltip = "The minimum number of bars that will be taken into account when calculating the indicator."
+// pivots threshold
+threshold_multiplier = input(title="Deviation", type=input.float, defval=3, minval=0, tooltip=devTooltip)
+dev_threshold = atr(10) / close * 100 * threshold_multiplier
+depth = input(title="Depth", type=input.integer, defval=10, minval=1, tooltip=depthTooltip)
+reverse = input(false, "Reverse")
+// Zig Zag
+
+ZigZag         = input(true, "Zig Zag   "                                          , inline = "ZZ", group = "Zig Zag Settings")
+zzColor        = input(color.orange, ""                                             , inline = "ZZ", group = "Zig Zag Settings")
+zzWidth        = input(1      , "", minval = 1                                      , inline = "ZZ", group = "Zig Zag Settings")
+zzStyle        = input("Dashed", "", options = ["Dashed", "Dotted", "Solid"]         , inline = "ZZ", group = "Zig Zag Settings")
+
+
+var extendLeft = input(false, "Extend Left    |    Extend Right", inline = "Extend Lines")
+var extendRight = input(true, "", inline = "Extend Lines")
+var extending = extend.none
+if extendLeft and extendRight
+    extending := extend.both
+if extendLeft and not extendRight
+    extending := extend.left
+if not extendLeft and extendRight
+    extending := extend.right
+prices = input(true, "Show Prices")
+levels = input(true, "Show Levels", inline = "Levels")
+levelsFormat = input("Values", "", options = ["Values", "Percent"], inline = "Levels")
+labelsPosition = input("Left", "Labels Position", options = ["Left", "Right"])
+
+// ---------------------------------------------------------------------------------------- //
+// Fibonacci 
+
+var line lineLast = na
+var int iLast     = 0
+var int iPrev     = 0
+var float pLast   = 0
+var isHighLast    = false // otherwise the last pivot is a low pivot
+
+var iPrevPivotRef = 0
+var pPrevPivotRef = 0.
+var iLastPivotRef = 0
+var pLastPivotRef = 0.
+
+pivots(src, length, isHigh) =>
+    l2 = length * 2
+    c  = nz(src[length])
+    ok = true
+    
+    for i = 0 to l2
+        if isHigh and src[i] > c
+            ok := false
+
+        if not isHigh and src[i] < c
+            ok := false
+    if ok
+        [bar_index[length], c]
+    else
+        [int(na), float(na)]
+
+[iH, pH] = pivots(high, depth / 2, true )
+[iL, pL] = pivots(low , depth / 2, false)
+
+calc_dev(base_price, price) =>
+    100 * (price - base_price) / price
+
+pivotFound(dev, isHigh, index, price) =>
+    if isHighLast == isHigh and not na(lineLast)
+        // same direction
+        if isHighLast ? price > pLast : price < pLast
+            line.set_xy2(lineLast, index, price)
+            [lineLast, isHighLast]
+        else
+            [line(na), bool(na)]
+    else // reverse the direction (or create the very first line)
+        if abs(dev) > dev_threshold
+            // price move is significant
+            
+            // ---------------------------------------------------------------------------------------- //
+            [zzCol, zzWid, zzSty] = if not ZigZag
+                [na, 1, line.style_dashed]
+            else
+                [zzColor, zzWidth, zzStyle == "Solid" ? line.style_solid : zzStyle == "Dotted" ? line.style_dotted : line.style_dashed]
+            // ---------------------------------------------------------------------------------------- //
+            
+            id = line.new(iLast, pLast, index, price, color=zzCol, width=zzWid, style=zzSty)
+            [id, isHigh]
+        else
+            [line(na), bool(na)]
+
+// Fibonacci, Zig Zag
+
+if not na(iH)
+    dev          = calc_dev(pLast, pH)
+    [id, isHigh] = pivotFound(dev, true, iH, pH)
+
+    if not na(id)
+        if id != lineLast
+            // ---------------------------------------------------------------------------------------- //
+
+            iPrevPivotRef  := line.get_x1(lineLast)
+            pPrevPivotRef  := line.get_y1(lineLast)
+            iLastPivotRef  := line.get_x2(lineLast)
+            pLastPivotRef  := line.get_y2(lineLast)
+            
+            if not ZigZag
+            // ---------------------------------------------------------------------------------------- //
+
+                line.delete(lineLast)
+        
+        lineLast   := id
+        isHighLast := isHigh
+        iPrev      := iLast
+        iLast      := iH
+        pLast      := pH
+else
+    if not na(iL)
+        dev          = calc_dev(pLast, pL)
+        [id, isHigh] = pivotFound(dev, false, iL, pL)
+        
+        if not na(id)
+            if id != lineLast
+                // ---------------------------------------------------------------------------------------- //
+
+                iPrevPivotRef  := line.get_x1(lineLast)
+                pPrevPivotRef  := line.get_y1(lineLast)
+                iLastPivotRef  := line.get_x2(lineLast)
+                pLastPivotRef  := line.get_y2(lineLast)
+
+                if not ZigZag
+                // ---------------------------------------------------------------------------------------- //
+
+                    line.delete(lineLast)
+            
+            lineLast   := id
+            isHighLast := isHigh
+            iPrev      := iLast
+            iLast      := iL
+            pLast      := pL
+
+// Zig Zag
+_draw_line(price, col) =>
+    var id = line.new(iLast, price, bar_index, price, color=col, width=1, extend=extending)
+    if not na(lineLast)
+        line.set_xy1(id, line.get_x1(lineLast), price)
+        line.set_xy2(id, line.get_x2(lineLast), price)
+
+
+_draw_label(price, txt, txtColor) =>
+    x = labelsPosition == "Left" ? line.get_x1(lineLast) : not extendRight ? line.get_x2(lineLast) : bar_index
+    labelStyle = labelsPosition == "Left" ? label.style_label_right : label.style_label_left
+    align = labelsPosition == "Left" ? text.align_right : text.align_left
+    labelsAlignStrLeft = txt + '\n ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏ \n'
+    labelsAlignStrRight = '       ' + txt + '\n ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏ \n'
+    labelsAlignStr = labelsPosition == "Left" ? labelsAlignStrLeft : labelsAlignStrRight
+    var id = label.new(x=x, y=price, text=labelsAlignStr, textcolor=txtColor, style=labelStyle, textalign=align, color=#00000000)
+    label.set_xy(id, x, price)
+    label.set_text(id, labelsAlignStr)
+    label.set_textcolor(id, txtColor)
+
+_wrap(txt) =>
+    "(" + tostring(txt, "#.##") + ")"
+
+_label_txt(level, price) =>
+    l = levelsFormat == "Values" ? tostring(level) : tostring(level * 100) + "%"
+    (levels ? l : "") + (prices ? _wrap(price) : "")
+
+_crossing_level(sr, r) =>
+    (r > sr and r < sr[1]) or (r < sr and r > sr[1])
+
+startPrice = reverse ? line.get_y1(lineLast) : pLast
+endPrice = reverse ? pLast : line.get_y1(lineLast)
+
+iHL = startPrice > endPrice
+diff = (iHL ? -1 : 1) * abs(startPrice - endPrice)
+
+processLevel(show, value, colorL) =>
+    float m = value
+    r = startPrice + diff * m
+    if show
+        _draw_line(r, colorL)
+        _draw_label(r, _label_txt(m, r), colorL)
+        //if _crossing_level(close, r)
+            //alert("Autofib: " + syminfo.ticker + " crossing level " + tostring(value))
+
+show_0 = input(true, "", inline = "Level0")
+value_0 = input(0, "", inline = "Level0")
+color_0 = input(#787b86, "", inline = "Level0")
+processLevel(show_0, value_0, color_0)
+
+show_0_5 = input(true, "", inline = "Level1")
+value_0_5 = input(0.5, "", inline = "Level1")
+color_0_5 = input(#4caf50, "", inline = "Level1")
+processLevel(show_0_5, value_0_5, color_0_5)
+
+show_0_618 = input(true, "", inline = "Level2")
+value_0_618 = input(0.618, "", inline = "Level2")
+color_0_618 = input(#009688, "", inline = "Level2")
+processLevel(show_0_618, value_0_618, color_0_618)
+
+show_1 = input(true, "", inline = "Level3")
+value_1 = input(1, "", inline = "Level3")
+color_1 = input(#787b86, "", inline = "Level3")
+processLevel(show_1, value_1, color_1)
+
+show_1_618 = input(true, "", inline = "Level5")
+value_1_618 = input(1.618, "", inline = "Level5")
+color_1_618 = input(#2196f3, "", inline = "Level5")
+processLevel(show_1_618, value_1_618, color_1_618)
+
+
+upperMult   = input(2,     "Linear Regression : Upper Deviation")
+lowerMult   = input(-2,    "Linear Regression : Lower Deviation")
+useUpperDev = input(true,  "Linear Regression : Use Upper Deviation")
+useLowerDev = input(true,  "Linear Regression : Use Lower Deviation")
+showPearson = input(true,  "Linear Regression : Show Pearson`s R")
+extendLines = input(false, "Linear Regression : Extend Lines")
+len         = input(100,   "Linear Regression : Count")
+src         = input(close, "Linear Regression : Source")
+
+// Linear Regression - build-in 
+extend = extendLines ? extend.right : extend.none
+calcSlope(src, len) =>
+	max_bars_back(src, 300)
+	if not barstate.islast or len <= 1
+		[float(na), float(na), float(na)]
+	else
+		sumX = 0.0
+		sumY = 0.0
+		sumXSqr = 0.0
+		sumXY = 0.0
+		for i = 0 to len - 1
+			val = src[i]
+			per = i + 1.0
+			sumX := sumX + per
+			sumY := sumY + val
+			sumXSqr := sumXSqr + per * per
+			sumXY := sumXY + val * per
+		slope = (len * sumXY - sumX * sumY) / (len * sumXSqr - sumX * sumX)
+		average = sumY / len
+		intercept = average - slope * sumX / len + slope
+		[slope, average, intercept]
+[slp, a, i] = calcSlope(src, len)
+startPriceL = i + slp * (len - 1)
+endPriceL = i
+var line baseLine = na
+if na(baseLine) and not na(startPriceL)
+	baseLine := line.new(bar_index - len + 1, startPriceL, bar_index, endPriceL, width=1, extend=extend, color=color.red)
+else
+	line.set_xy1(baseLine, bar_index - len + 1, startPriceL)
+	line.set_xy2(baseLine, bar_index, endPriceL)
+	na
+calcDev(src, len, slope, average, intercept) =>
+	upDev = 0.0
+	dnDev = 0.0
+	stdDevAcc = 0.0
+	dsxx = 0.0
+	dsyy = 0.0
+	dsxy = 0.0
+	periods = len - 1
+	daY = intercept + (slope * periods) / 2
+	val = intercept
+	for i = 0 to periods
+		price = high[i] - val
+		if (price > upDev)
+			upDev := price
+		price := val - low[i]
+		if (price > dnDev)
+			dnDev := price
+		price := src[i]
+		dxt = price - average
+		dyt = val - daY
+		price := price - val
+		stdDevAcc := stdDevAcc + price * price
+		dsxx := dsxx + dxt * dxt
+		dsyy := dsyy + dyt * dyt
+		dsxy := dsxy + dxt * dyt
+		val := val + slope
+	stdDev = sqrt(stdDevAcc / (periods == 0 ? 1 : periods))
+	pearsonR = dsxx == 0 or dsyy == 0 ? 0 : dsxy / sqrt(dsxx * dsyy)
+	[stdDev, pearsonR, upDev, dnDev]
+[stdDev, pearsonR, upDev, dnDev] = calcDev(src, len, slp, a, i)
+upperStartPrice = startPriceL + (useUpperDev ? upperMult * stdDev : upDev)
+upperEndPrice = endPriceL + (useUpperDev ? upperMult * stdDev : upDev)
+var line upper = na
+lowerStartPrice = startPriceL + (useLowerDev ? lowerMult * stdDev : -dnDev)
+lowerEndPrice = endPriceL + (useLowerDev ? lowerMult * stdDev : -dnDev)
+var line lower = na
+if na(upper) and not na(upperStartPrice)
+	upper := line.new(bar_index - len + 1, upperStartPrice, bar_index, upperEndPrice, width=1, extend=extend, color=#0000ff)
+else
+	line.set_xy1(upper, bar_index - len + 1, upperStartPrice)
+	line.set_xy2(upper, bar_index, upperEndPrice)
+	na
+if na(lower) and not na(lowerStartPrice)
+	lower := line.new(bar_index - len + 1, lowerStartPrice, bar_index, lowerEndPrice, width=1, extend=extend, color=#0000ff)
+else
+	line.set_xy1(lower, bar_index - len + 1, lowerStartPrice)
+	line.set_xy2(lower, bar_index, lowerEndPrice)
+	na
+
+
+// Pearson`s R
+var label r = na
+transparent = color.new(color.white, 100)
+label.delete(r[1])
+if showPearson and not na(pearsonR)
+	r := label.new(bar_index - len + 1, lowerStartPrice, tostring(pearsonR, "#.########"), color=transparent, textcolor=#0000ff, size=size.normal, style=label.style_labelup)
+
+plot(round(pearsonR*1000)/1000, display=display.none)
+
+//(cl_p > (ep_mp + st_dv * 2))//
+//(cl_p < (ep_mp - st_dv * 2)//
+
+
+f_LregBrk(_ticker)=>
+    
+    [cl_p, ep_mp, st_dv, sp_mp, val_hi, val_lo, sr_01] = security(_ticker, timeframe.period, [close, endPriceL, stdDev, startPriceL, high, low, rsi(close, 14)], lookahead = barmerge.lookahead_on)
+    _msg = _ticker + "~CLS-" + tostring(round(cl_p * 100) / 100)
+    
+    if (sp_mp - ep_mp) > 0 and crossover(cl_p, (ep_mp + st_dv * 2))
+        _msg := _msg + "~>" + " Uppper Channel Break ▲▲"
+        array.set(alert_strings, 0, array.get(alert_strings, 0) + "\n" + _msg)
+        array.set(table_row_count, 0, array.get(table_row_count, 0) + 1)
+        
+        if barstate.islast
+            table.cell(table_id = UpTabl, column = 0, row = array.get(table_row_count, 0), text = _ticker)
+            table.cell(table_id = UpTabl, column = 1, row = array.get(table_row_count, 0), text = tostring(round(cl_p * 100) / 100), bgcolor=color.rgb(0, 200, 100))
+            table.cell(table_id = UpTabl, column = 2, row = array.get(table_row_count, 0), text = tostring(round(val_hi * 100) / 100), bgcolor=color.rgb(0, 200, 100))
+
+        
+    else if (sp_mp - ep_mp) < 0 and crossunder(cl_p, (ep_mp - st_dv * 2))
+        _msg := _msg + "~>" + " Lower Channel Break ▼▼"
+        array.set(alert_strings, 1, array.get(alert_strings, 1) + "\n" + _msg)
+        array.set(table_row_count, 1, array.get(table_row_count, 1) + 1)
+        
+        if barstate.islast
+            table.cell(table_id = DnTabl, column = 0, row = array.get(table_row_count, 1), text = _ticker)
+            table.cell(table_id = DnTabl, column = 1, row = array.get(table_row_count, 1), text = tostring(round(cl_p * 100) / 100), bgcolor=color.rgb(255, 0, 0))
+            table.cell(table_id = DnTabl, column = 2, row = array.get(table_row_count, 1), text = tostring(round(val_lo * 100) / 100), bgcolor=color.rgb(255, 0, 0))
+
+        
+    var RsStoTabl = table.new(position = position.bottom_left, columns = 3, rows = 20, bgcolor = color.rgb(200, 230, 255), border_width = 2, frame_color= color.black, frame_width = 2)
+    
+    if barstate.islast
+        table.cell(table_id = RsStoTabl, column = 0, row = 0, text = "Ticker")
+        table.cell(table_id = RsStoTabl, column = 1, row = 0, text = "RSI ~") 
+       
+        if sr_01 > 65
+            _msg := _msg + "~>" + "RSI - OB ▲ " + tostring(round(sr_01 * 10) / 10)
+            array.set(alert_strings, 2, array.get(alert_strings, 2) + "\n" + _msg)
+            array.set(table_row_count, 2, array.get(table_row_count, 2) + 1)
+            table.cell(table_id = RsStoTabl, column = 0, row = array.get(table_row_count, 2), text = _ticker)
+            table.cell(table_id = RsStoTabl, column = 1, row = array.get(table_row_count, 2), text = tostring(int(sr_01)), bgcolor=color.from_gradient(sr_01, 40, 60, color.rgb(255, 70, 70), color.rgb(0, 200, 100)))
+            
+        
+        else if sr_01 < 35
+            _msg := _msg + "~>" + "RSI - OS ▼ " + tostring(round(sr_01 * 10) / 10)
+            array.set(alert_strings, 3, array.get(alert_strings, 3) + "\n" + _msg)
+            array.set(table_row_count, 2, array.get(table_row_count, 2) + 1)
+            table.cell(table_id = RsStoTabl, column = 0, row = array.get(table_row_count, 2), text = _ticker)
+            table.cell(table_id = RsStoTabl, column = 1, row = array.get(table_row_count, 2), text = tostring(int(sr_01)), bgcolor=color.from_gradient(sr_01, 40, 60, color.rgb(255, 70, 70), color.rgb(0, 200, 100)))    
+            
+
+
+f_LregBrk(syminfo.tickerid)
+f_LregBrk(input('DJI', title=input.symbol)) 
+f_LregBrk(input('IXIC', title=input.symbol)) 
+f_LregBrk(input('SPX', title=input.symbol)) 
+f_LregBrk(input('RUT', title=input.symbol)) 
+f_LregBrk(input('AAPL', title=input.symbol))
+f_LregBrk(input('AMZN', title=input.symbol)) 
+f_LregBrk(input('FB', title=input.symbol)) 
+f_LregBrk(input('GOOG', title=input.symbol)) 
+f_LregBrk(input('NFLX', title=input.symbol))
+f_LregBrk(input('MSFT', title=input.symbol)) 
+f_LregBrk(input('NVDA', title=input.symbol)) 
+f_LregBrk(input('FDX', title=input.symbol)) 
+f_LregBrk(input('GLD', title=input.symbol))
+
+
+
+
+if array.get(alert_strings, 0) != ""
+    alert(array.get(alert_strings, 0),  alert.freq_once_per_bar)
+
+if array.get(alert_strings, 1) != ""
+    alert(array.get(alert_strings, 1),  alert.freq_once_per_bar)
+
+//if array.get(alert_strings, 2) != ""
+    //alert(array.get(alert_strings, 2),  alert.freq_once_per_bar)
+
+//if array.get(alert_strings, 3) != ""
+    //alert(array.get(alert_strings, 3),  alert.freq_once_per_bar)
+    
+    

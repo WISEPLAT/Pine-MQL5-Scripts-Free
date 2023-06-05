@@ -1,0 +1,116 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © dmdman
+// This is my attempt of Zig Zag indicator (combined with support and resistance levels based on zig zag points).
+// Arrays are used in this version.
+// Calculations are based on close price.
+// There is an option to choose length for highest and lowest points to reduce volatility noise.
+// Zig Zag indicator plots points on the chart whenever prices reverse by a percentage greater than a pre-chosen variable. 
+// This indicator is used to identify price trends.
+//
+//@version=4
+study("custom_zz_v1.0",overlay=true,max_lines_count=500)
+
+//input options
+change1         =   input(title="change from last extreme point(%)",   defval=5.,              minval=0.01)
+len1            =   input(title="highest/lowest points length (bars)", defval=20,              minval=1)
+width1          =   input(title="zigzag width",                        defval=2,               minval=1,   maxval=5)
+clr1            =   input(title="zigzag color",                        defval=color.black)
+bShowHlines     =   input(title="show horizontal s/r lines",           defval=true,            type=input.bool)
+bShowSlines     =   input(title="show sloping s/r lines",              defval=true,            type=input.bool)
+
+//declare variables
+var b1          =   0
+var zzX         =   bar_index
+var zzY         =   close
+var arrY        =   array.new_float(1,close)
+var arrX        =   array.new_int(1,bar_index)
+var arrYh       =   array.new_float(1,close)
+var arrXh       =   array.new_int(1,bar_index)
+var arrYl       =   array.new_float(1,close)
+var arrXl       =   array.new_int(1,bar_index)
+
+//conditions for extreme points
+c1  = (close-zzY)/close*100 > change1   and b1!=1   and   close==highest(close,len1)
+c2  = (zzY-close)/zzY*100   > change1   and b1!=-1  and   close==lowest(close,len1)
+
+//part for extreme points update
+zzY :=
+   b1==1? max(close[1],zzY):
+   b1==-1?min(close[1],zzY):
+   zzY
+zzX :=
+   change(zzY)?
+   bar_index[1]:
+   zzX
+if c1 == true or c2 == true                                     
+    array.push(arrY,zzY)
+    array.push(arrX,zzX) 
+    if c1 == true
+        b1:=1 
+        array.push(arrYl,zzY)
+        array.push(arrXl,zzX)
+    if c2 == true
+        b1:=-1
+        array.push(arrYh,zzY)
+        array.push(arrXh,zzX)
+
+    // part for zig zag line
+    if array.size(arrX)>1
+        line3 =
+           line.new(
+           x1 = array.get(arrX,array.size(arrX)-2),
+           y1 = array.get(arrY,array.size(arrY)-2),
+           x2 = array.get(arrX,array.size(arrX)-1),
+           y2 = array.get(arrY,array.size(arrY)-1),
+           color=clr1,
+           width=width1
+           )
+
+    // part for horizontal support and resistanse lines
+    if bShowHlines == true
+        if c1 == true
+            line1 =       
+               line.new(
+               x1 = zzX-1,
+               y1 = zzY,
+               x2 = zzX,
+               y2 = zzY,
+               color=color.green,
+               extend=extend.right
+               ) 
+        if c2 == true
+            line2 =
+               line.new(
+               x1 = zzX-1,
+               y1 = zzY,
+               x2 = zzX,
+               y2 = zzY,
+               color=color.red,
+               extend=extend.right
+               )  
+    
+    //part for sloping support and resistanse lines
+    if bShowSlines == true
+        if array.size(arrXl)>1 and c1 == true
+            lineH =
+               line.new(
+               x1 = array.get(arrXl,array.size(arrXl)-2),
+               y1 = array.get(arrYl,array.size(arrYl)-2),
+               x2 = array.get(arrXl,array.size(arrXl)-1),
+               y2 = array.get(arrYl,array.size(arrYl)-1),
+               color=color.green,
+               width=1,
+               extend=extend.right
+               )
+        if array.size(arrXh)>1 and c2 == true
+            lineL=
+               line.new(
+               x1 = array.get(arrXh,array.size(arrXh)-2),
+               y1 = array.get(arrYh,array.size(arrYh)-2),
+               x2 = array.get(arrXh,array.size(arrXh)-1),
+               y2 = array.get(arrYh,array.size(arrYh)-1),
+               color=color.red,
+               width=1,
+               extend=extend.right
+               )
+    zzY:=close

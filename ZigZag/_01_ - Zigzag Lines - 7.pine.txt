@@ -1,0 +1,74 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// @mebiele
+// Thanks to @mmoiwgg, this is just a simplified and less fancy presentattion of your work
+//@version=5
+indicator('Zigzag Lines', overlay=true, max_lines_count=500)
+
+//Inputs
+zigperiod = input(defval=5, title='ZigZag Period', group='Zigzag')
+zigsrc = input.string("close", title='Zig Zag Source',options=["close", "high/low"], group='Zigzag')
+upcolor = input(defval=color.green, title='Zig Zag Up Color', group='Display')
+downcolor = input(defval=color.red, title='Zig Zag Down Color', group='Display')
+zigstyle = input.string(defval='Solid', title='Zig Zag Line Style', options=['Solid', 'Dotted'], group='Display')
+zigwidth = input(defval=3, title='Zig zag Line Width', group='Display')
+
+
+//Float
+float highs = na
+float lows = na
+if zigsrc == "close"
+    highs := ta.highestbars(close, zigperiod) == 0 ? close : na
+    lows := ta.lowestbars(close, zigperiod) == 0 ? close : na
+else
+    highs := ta.highestbars(high, zigperiod) == 0 ? high : na
+    lows := ta.lowestbars(low, zigperiod) == 0 ? low : na
+
+//Variables
+var dir1 = 0
+iff_1 = lows and na(highs) ? -1 : dir1
+dir1 := highs and na(lows) ? 1 : iff_1
+
+var max_array_size = 100
+var zigzagPivots = array.new_float(max_array_size)
+var zigzagPivotBars = array.new_int(max_array_size)
+
+add_to_arrays(pointer1, value, pointer2, bindex) =>
+    array.unshift(pointer2, bindex)
+    array.unshift(pointer1, value)
+    if array.size(pointer1) > max_array_size
+        array.pop(pointer1)
+        array.pop(pointer2)
+
+update_arrays(pointer1, value, pointer2, bindex, dir) =>
+    if array.size(pointer1) == 0
+        add_to_arrays(pointer1, value, pointer2, bindex)
+    else
+        if dir == 1 and value > array.get(pointer1, 0) or dir == -1 and value < array.get(pointer1, 0)
+            array.set(pointer1, 0, value)
+            array.set(pointer2, 0, bindex)
+        0.
+
+dir1changed = ta.change(dir1)
+if highs or lows
+    if dir1changed
+        add_to_arrays(zigzagPivots, dir1 == 1 ? highs : lows, zigzagPivotBars, bar_index)
+    else
+        update_arrays(zigzagPivots, dir1 == 1 ? highs : lows, zigzagPivotBars, bar_index, dir1)
+        
+ 
+if array.size(zigzagPivots) >= 2
+    var line zzline1 = na
+    var label zzlabel1 = na
+    float val = array.get(zigzagPivots, 0)
+    int point = array.get(zigzagPivotBars, 0)
+    if ta.change(val) or ta.change(point)
+        float val1 = array.get(zigzagPivots, 1)
+        int point1 = array.get(zigzagPivotBars, 1)
+        if ta.change(val1) == 0 and ta.change(point1) == 0
+            line.delete(zzline1)
+            label.delete(zzlabel1)
+        // showline
+        zzline1 := line.new(x1=point, x2=point1, y1=val, y2=val1, color=dir1 == 1 ? upcolor : downcolor, width=zigwidth, style=zigstyle == 'Solid' ? line.style_solid : line.style_dotted)
+        zzline1
+        
+        

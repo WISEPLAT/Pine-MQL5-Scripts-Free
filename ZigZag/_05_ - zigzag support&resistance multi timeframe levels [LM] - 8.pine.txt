@@ -1,0 +1,194 @@
+//@version=5
+
+indicator('zigzag support&resistance multi timeframe levels [LM]', shorttitle='Zigzag S/R MT [LM]', overlay=true)
+
+i_showFirst = input.bool(true, 'Show first', group='current S/R setting')
+i_firstDepth = input.int(34, 'Depth', group='current S/R setting')
+i_firstDeviation = input.float(6.0, 'Deviation', group='current S/R setting')
+i_firstColor = input.color(color.red, 'Color', group='current S/R setting')
+i_extendLines = input.bool(true, 'Extend lines', group='current S/R setting')
+i_lineCount = input.int(10, 'Line count', group='current S/R setting')
+
+
+i_secondTimeFrame = input.timeframe('W', 'resolution', group='second S/R setting')
+i_secondDepth = input.int(34, 'Depth', group='second S/R setting')
+i_secondDeviation = input.float(6.0, 'Deviation', group='second S/R setting')
+i_secondCandleColor = input.color(color.blue, 'candle low color', group='second S/R setting')
+i_showSecondSR1 = input.bool(true, 'Show S/R 1', group='second S/R setting')
+i_showSecondSR2 = input.bool(true, 'Show S/R 2', group='second S/R setting')
+i_showSecondSR3 = input.bool(false, 'Show S/R 3', group='second S/R setting')
+i_showSecondSR4 = input.bool(false, 'Show S/R 4', group='second S/R setting')
+
+
+i_thirdTimeFrame = input.timeframe('D', 'resolution', group='third S/R setting')
+i_thirdDepth = input.int(34, 'Depth', group='third S/R setting')
+i_thirdDeviation = input.float(6.0, 'Deviation', group='third S/R setting')
+i_thirdCandleColor = input.color(color.orange, 'candle high color', group='third S/R setting')
+i_showThirdSR1 = input.bool(true, 'Show S/R 1', group='third S/R setting')
+i_showThirdSR2 = input.bool(true, 'Show S/R 2', group='third S/R setting')
+i_showThirdSR3 = input.bool(false, 'Show S/R 3', group='third S/R setting')
+i_showThirdSR4 = input.bool(false, 'Show S/R 4', group='third S/R setting')
+
+i_fourthTimeFrame = input.timeframe('240', 'resolution', group='fourth S/R setting')
+i_fourthDepth = input.int(34, 'Depth', group='fourth S/R setting')
+i_fourthDeviation = input.float(6.0, 'Deviation', group='fourth S/R setting')
+i_fourthCandleColor = input.color(color.lime, 'candle high color', group='fourth S/R setting')
+i_showFourthSR1 = input.bool(false, 'Show S/R 1', group='fourth S/R setting')
+i_showFourthSR2 = input.bool(false, 'Show S/R 2', group='fourth S/R setting')
+i_showFourthSR3 = input.bool(false, 'Show S/R 3', group='fourth S/R setting')
+i_showFourthSR4 = input.bool(false, 'Show S/R 4', group='fourth S/R setting')
+
+
+var zigZagArray = array.new_line()
+var zigZagLabelArray = array.new_label()
+
+f_barssince(_cond, _count) =>
+    _barssince = bar_index - ta.valuewhen(_cond, bar_index, _count)
+    _barssince
+
+f_zigzag(_depth, _deviation) =>
+    var lw = 1
+    var hg = 1
+    lw := lw + 1
+    hg := hg + 1
+    lowestValue = -ta.lowestbars(_depth)
+    highestValue = -ta.highestbars(_depth)
+    lowing = lw == lowestValue or low - low[lowestValue] > _deviation * syminfo.mintick
+    highing = hg == highestValue or high[highestValue] - high > _deviation * syminfo.mintick
+    lh = ta.barssince(not highing)
+    ll = ta.barssince(not lowing)
+    down = lh > ll
+    lower = low[lw] > low[lowestValue]
+    higher = high[hg] < high[highestValue]
+    if lw != lowestValue and (not down[1] or lower)
+        lw := lowestValue < hg ? lowestValue : 0
+        lw
+    if hg != highestValue and (down[1] or higher)
+        hg := highestValue < lw ? highestValue : 0
+        hg
+    x1 = down ? lw : hg
+    y1 = down ? low[lw] : high[hg]
+    lb = down ? label.style_label_up : label.style_label_down
+    [down != down[1], x1, y1, lw, hg, down]
+
+
+f_drawLine(_x1, _x2, _yValue, _lineColor) =>
+    line.new(x1=_x1, y1=_yValue, x2=_x2, y2=_yValue, color=_lineColor, style=line.style_dotted, width=2)
+
+f_drawLabelCurrent(_x, _y, _textColor) =>
+    label.new(_x, _y, '         ' + str.tostring(_y), xloc.bar_index, yloc.price, #00000000, label.style_none, _textColor)
+
+f_drawLabel(_yValue, _xValue, _labelColor, _text, _showLabels) =>
+    var label lb = na
+    label.delete(lb)
+
+    if _showLabels and not na(_yValue)
+        lb := label.new(x=_xValue, y=_yValue, text=_text, textcolor=_labelColor, style=label.style_none, xloc=xloc.bar_time, yloc=yloc.price)
+        lb
+    lb
+
+f_extendArray(_lineArray, _labelArray, _extendLines) =>
+    if array.size(_lineArray) > 0
+        for _i = array.size(_lineArray) - 1 to 0 by 1
+
+            x2 = line.get_x2(array.get(_lineArray, _i))
+            yValue = line.get_y1(array.get(_lineArray, _i))
+
+            if _extendLines or bar_index - 1 == x2 and not(high > yValue and low < yValue)
+                line.set_x2(array.get(_lineArray, _i), bar_index)
+                label.set_x(array.get(_labelArray, _i), bar_index)
+
+
+f_addLine(_switch, _x1, _y1, _lw, _hg, _down, _colorLine) =>
+    if _switch
+        line l = na
+        label lab = na
+
+        nx = _down ? _hg : _lw
+        yValue = _down ? high[nx] : low[nx]
+        x1 = bar_index - nx
+        x2 = bar_index
+
+        if _down != _down[1] and not na(yValue)
+            l := f_drawLine(x1, x2, yValue, _colorLine)
+            lab := f_drawLabelCurrent(x2, yValue, _colorLine)
+            lab
+
+        if array.size(zigZagArray) == i_lineCount
+            line.delete(array.shift(zigZagArray))
+            label.delete(array.shift(zigZagLabelArray))
+        array.push(zigZagArray, l)
+        array.push(zigZagLabelArray, lab)
+
+f_multTimeframeSetting(_depth, _deviation, _occurence) =>
+    [switch_1, x1, y1, lw, hg, down] = f_zigzag(_depth, _deviation)
+
+    nx = down ? hg : lw
+    yValue = ta.valuewhen(down != down[1], down ? high[nx] : low[nx], _occurence)
+    yValue
+
+// current functions           
+[switch1, x11, y11, lw1, hg1, down1] = f_zigzag(i_firstDepth, i_firstDeviation)
+
+if i_showFirst
+    f_addLine(switch1, x11, y11, lw1, hg1, down1, i_firstColor)
+    f_extendArray(zigZagArray, zigZagLabelArray, i_extendLines)
+
+
+// other time frames
+diffTime = na(time[1]) ? time : math.min(time, time - time[1])
+firstValue = time + diffTime * 30
+secondValue = time + diffTime * 60
+thirdValue = time + diffTime * 90
+
+// Second timeframe
+yValue11 = request.security(syminfo.tickerid, i_secondTimeFrame, f_multTimeframeSetting(i_secondDepth, i_secondDeviation, 0))
+yValue12 = request.security(syminfo.tickerid, i_secondTimeFrame, f_multTimeframeSetting(i_secondDepth, i_secondDeviation, 1))
+yValue13 = request.security(syminfo.tickerid, i_secondTimeFrame, f_multTimeframeSetting(i_secondDepth, i_secondDeviation, 2))
+yValue14 = request.security(syminfo.tickerid, i_secondTimeFrame, f_multTimeframeSetting(i_secondDepth, i_secondDeviation, 3))
+
+plot(i_showSecondSR1 ? yValue11 : na, title='yValue11', linewidth=2, color=i_secondCandleColor, show_last=1, trackprice=true)
+plot(i_showSecondSR2 ? yValue12 : na, title='yValue12', linewidth=2, color=i_secondCandleColor, show_last=1, trackprice=true)
+plot(i_showSecondSR3 ? yValue13 : na, title='yValue13', linewidth=2, color=i_secondCandleColor, show_last=1, trackprice=true)
+plot(i_showSecondSR4 ? yValue14 : na, title='yValue14', linewidth=2, color=i_secondCandleColor, show_last=1, trackprice=true)
+
+f_drawLabel(yValue11, firstValue, i_secondCandleColor, i_secondTimeFrame + ' 1', i_showSecondSR1)
+f_drawLabel(yValue12, firstValue, i_secondCandleColor, i_secondTimeFrame + ' 2', i_showSecondSR2)
+f_drawLabel(yValue13, firstValue, i_secondCandleColor, i_secondTimeFrame + ' 3', i_showSecondSR3)
+f_drawLabel(yValue14, firstValue, i_secondCandleColor, i_secondTimeFrame + ' 4', i_showSecondSR4)
+
+// Third timeframe
+yValue21 = request.security(syminfo.tickerid, i_thirdTimeFrame, f_multTimeframeSetting(i_thirdDepth, i_thirdDeviation, 0))
+yValue22 = request.security(syminfo.tickerid, i_thirdTimeFrame, f_multTimeframeSetting(i_thirdDepth, i_thirdDeviation, 1))
+yValue23 = request.security(syminfo.tickerid, i_thirdTimeFrame, f_multTimeframeSetting(i_thirdDepth, i_thirdDeviation, 2))
+yValue24 = request.security(syminfo.tickerid, i_thirdTimeFrame, f_multTimeframeSetting(i_thirdDepth, i_thirdDeviation, 3))
+
+plot(i_showSecondSR1 ? yValue21 : na, title='yValue21', linewidth=2, color=i_thirdCandleColor, show_last=1, trackprice=true)
+plot(i_showSecondSR2 ? yValue22 : na, title='yValue22', linewidth=2, color=i_thirdCandleColor, show_last=1, trackprice=true)
+plot(i_showSecondSR3 ? yValue23 : na, title='yValue23', linewidth=2, color=i_thirdCandleColor, show_last=1, trackprice=true)
+plot(i_showSecondSR4 ? yValue24 : na, title='yValue24', linewidth=2, color=i_thirdCandleColor, show_last=1, trackprice=true)
+
+f_drawLabel(yValue21, secondValue, i_thirdCandleColor, i_thirdTimeFrame + ' 1', i_showThirdSR1)
+f_drawLabel(yValue22, secondValue, i_thirdCandleColor, i_thirdTimeFrame + ' 2', i_showThirdSR2)
+f_drawLabel(yValue23, secondValue, i_thirdCandleColor, i_thirdTimeFrame + ' 3', i_showThirdSR3)
+f_drawLabel(yValue24, secondValue, i_thirdCandleColor, i_thirdTimeFrame + ' 4', i_showThirdSR4)
+
+
+// Fourth timeframe
+yValue31 = request.security(syminfo.tickerid, i_fourthTimeFrame, f_multTimeframeSetting(i_fourthDepth, i_fourthDeviation, 0))
+yValue32 = request.security(syminfo.tickerid, i_fourthTimeFrame, f_multTimeframeSetting(i_fourthDepth, i_fourthDeviation, 1))
+yValue33 = request.security(syminfo.tickerid, i_fourthTimeFrame, f_multTimeframeSetting(i_fourthDepth, i_fourthDeviation, 2))
+yValue34 = request.security(syminfo.tickerid, i_fourthTimeFrame, f_multTimeframeSetting(i_fourthDepth, i_fourthDeviation, 3))
+
+plot(i_showFourthSR1 ? yValue31 : na, title='yValue31', linewidth=2, color=i_fourthCandleColor, show_last=1, trackprice=true)
+plot(i_showFourthSR2 ? yValue32 : na, title='yValue32', linewidth=2, color=i_fourthCandleColor, show_last=1, trackprice=true)
+plot(i_showFourthSR3 ? yValue33 : na, title='yValue33', linewidth=2, color=i_fourthCandleColor, show_last=1, trackprice=true)
+plot(i_showFourthSR4 ? yValue34 : na, title='yValue34', linewidth=2, color=i_fourthCandleColor, show_last=1, trackprice=true)
+
+f_drawLabel(yValue31, thirdValue, i_fourthCandleColor, i_fourthTimeFrame + ' 1', i_showFourthSR1)
+f_drawLabel(yValue32, thirdValue, i_fourthCandleColor, i_fourthTimeFrame + ' 2', i_showFourthSR2)
+f_drawLabel(yValue33, thirdValue, i_fourthCandleColor, i_fourthTimeFrame + ' 3', i_showFourthSR3)
+f_drawLabel(yValue34, thirdValue, i_fourthCandleColor, i_fourthTimeFrame + ' 4', i_showFourthSR4)
+
+
+

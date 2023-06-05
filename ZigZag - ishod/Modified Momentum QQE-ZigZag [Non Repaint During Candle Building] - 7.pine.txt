@@ -1,0 +1,416 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Hutmacher42
+
+// | | | | | | |             | | | | | | |              
+// V V V V V V V Please Read V V V V V V V
+
+//>>>>>>>>>> This is a modified Version of Peter_O's Momentum Based ZigZag [QQE] <<<<<<<<<<<
+
+// This is only a test, and i want to share it with the community
+// It works like other ZigZags
+
+// Because Peters_O's original Version is only non repaint on closed historical Data ,
+// during a Candle building process it can still repaint (signal appears / 21 seconds later signal disapears / 42 seconds later signal appears again in the same candle / etc.),
+// but that isnt important for backtesting, its only important for realtime PivotPoints during a candle
+
+// My goal for this zigzag was to make it absolute non repaint neither during a candle building process (current candle), 
+// so once the signal is shown there is no chance that it disapers and shown a few seconds later again on that same candle, it can only show up one time per candle an thats it,
+// and that makes it absolute non repaint in all time frames.
+
+//===========================================================================================================================================//
+
+// ==> Thanks to Glaz , for bringing the QQE to Tradingview <3 
+// ==> Thanks to Peter_O , for sharing his idea to use the QQE as base for a Zigzag
+//                         and for sharing his MTF RSI with the Community <3
+// ==> Thanks to HeWhoMustNotBeNamed, for sharing his awesome Supertrend Library,
+//                         and for sharing his Divergence Detection Script with the Community <3
+
+// Glaz's QQE :                                https://www.tradingview.com/script/tJ6vtBBe-QQE/
+// Peter_O's Momentum ZigZag :                 https://www.tradingview.com/script/gY4ilk5N-Momentum-based-ZigZag-incl-QQE-NON-REPAINTING/
+// Peter_O's MTF RSI :                         https://www.tradingview.com/script/JwWWwZOD-RSI-MTF-by-PeterO/
+// HeWhoMustNotBeNamed's SuperTrend Lib :      https://www.tradingview.com/script/guHY9dmv-supertrend/
+// HeWhoMustNotBeNamed's Divergence Detector : https://www.tradingview.com/script/vnzbp63L-Zigzag-Trend-Divergence-Detector/
+
+//===========================================================================================================================================//
+
+// Info:    - Every Calculation in that Script is Non-Repaint
+//          - i added Info Symbol to every Parameter
+
+// Changes: - I changed the MTF RSI a little bit, you can choose between two version
+//          - I changed the QQE a little bit, its now using the MTF RSI , and its using High and Low values as Source to make it absolute non repaint during a candle is building
+//          - I added a little Divergence Calculation beween price and the MTF RSI that is used for the ZigZag
+//          - I changed the Supertrend calculation and make it less complex
+
+// Important: ==> It is not possible to backtest this script correctly with historical Data, its only possible in Realtime, 
+//                because the QQE is using crossunders with RSILowSource and the QQE Line to find the Tops and,
+//                because the QQE is using crossovers with RSIHighSource and the QQE Line to find the Bottoms,
+//                and that means it is not possible to find the correct Time/Moment when that crossovers / crossunders happen in historical Data
+
+// =============> Please be sure you understand the Calculation and Backtest it in Realtime when you want to use it, 
+//                because i didn't published this script for real trading
+
+// =============> Im not a financial advisor and youre using this script at your own risk
+// =============> Please do your own research
+
+//@version=5
+
+indicator("Modified Momentum QQE-ZigZag [Non Repaint During Candle Building]", overlay = true, max_labels_count = 500)
+
+//- Parameter Info -//
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Info: RSI-QQE ZigZag
+info_r1_type = "Choose between Cutlers and Wilders RSI"
+info_r1_len = "==> Rsi-Len: Set the Length for the RSI\n==> Mtf-Mult: Length Multiplier for RSI to get MTF Resolution"
+info_r1_mult = "==> QQE-Mult: Set the distance between QQE and RSI (works similar like Supertrend Mult)\n==> Rsi-Smooth: Smooth the Rsi with EMA"
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Info: Divergence / Convergence
+info_d1_src = "==> Div_Src: Choose source for different Rsi, \n (but with the same settings as QQE-RSI)\n==> Choose how many pivot points should be included in the calculation"
+info_d1_limit = "==> Div-Botlimit: Shows only the Divs that are under that limit\n==> Div-Toplimit: Shows only the Divs that are over that limit"
+info_d2_limit = "==> Conv-Botlimit: Shows only the Convs that are under that limit\n==> Conv-Toplimit: Shows only the Convs that are over that limit"
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Info: Supertrend
+info_s1_incl = "Wanna include the ZigZag in the Supertrend calculation?"
+info_s1_len = "==> MA-Len: Set the Length for the Base of the Supertend\n==> MA-Type: Choose the Base Type for the Supertrend"
+info_s1_atr = "==> Atr-Len: Set the Length for the Atr\n==> Atr:Mult: Set the Multiplier for the ATR"
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+//- Inputs -//
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Input: RSI-QQE ZigZag
+r1_type = input.string("Wilders", title = "Rsi-Type", options = ["Cutlers", "Wilders"], group = "ZigZag", inline = "R_0", tooltip = info_r1_type)
+
+r1_len = input.int(14, title = "Rsi-Len", group = "ZigZag", inline = "R_2")
+r1_mtf = input.int(2, title = "Mtf-Mult", group = "ZigZag", inline = "R_2", tooltip = info_r1_len)
+
+r1_mult = input.float(3, title = "QQe-Mult", group = "ZigZag", inline = "Q_1")
+r1_smooth = input.int(1, title = "Smooth", group = "ZigZag", inline = "Q_1", tooltip = info_r1_mult)
+
+l1_bull = input.color(color.green, title = "Bull-Col", group = "ZigZag", inline = "Q_2")
+l1_bear = input.color(color.red, title = "Bear-Col", group = "ZigZag", inline = "Q_2")
+
+l1_zz = input.color(#5b9cf6, title = "ZigZag", group = "ZigZag", inline = "Q_3")
+l1_line = input.int(1, title = "Line", group = "ZigZag", inline = "Q_3")
+l1_points = input.int(1, title = "•", group = "ZigZag", inline = "Q_3")
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Input: RSI Divergence / Convergence
+d1_src = input.source(close, title = "Div-Src", group = "Divergence / Convergence", inline = "D_0")
+d1_pp = input.string("1", title = "PPs-Back", options = ["1", "2", "3"], group = "Divergence / Convergence", inline = "D_0", tooltip = info_d1_src)
+
+d1_botlimit = input.float(28, title = "Div-BotLimit", group = "Divergence / Convergence", inline = "D_1")
+d1_toplimit = input.float(70, title = "Div-TopLimit", group = "Divergence / Convergence", inline = "D_1", tooltip = info_d1_limit)
+l1_pos = input.color(color.yellow, title = "Div▲", group = "Divergence / Convergence", inline = "C_2")
+l1_neg = input.color(#ab47bc, title = "Div▼", group = "Divergence / Convergence", inline = "C_2")
+d1_show = input.bool(true, title = "Show-Divergence", group = "Divergence / Convergence", inline = "C_2")
+
+d2_botlimit = input.float(52.5, title = "Conv-BotLimit", group = "Divergence / Convergence", inline = "D_2")
+d2_toplimit = input.float(47.5, title = "Conv-TopLimit", group = "Divergence / Convergence", inline = "D_2", tooltip = info_d2_limit)
+l2_pos = input.color(#26c6da, title = "Conv▲", group = "Divergence / Convergence", inline = "C_3")
+l2_neg = input.color(#ff9200, title = "Conv▼", group = "Divergence / Convergence", inline = "C_3")
+d2_show = input.bool(true, title = "Show-Convergence", group = "Divergence / Convergence", inline = "C_3")
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Input: Supertrend
+s1_show = input.bool(true, title = "Show-Supertrend", group = "Supertrend", inline = "S_00")
+
+s1_len = input.int(34, title = "Ma-Len", group = "Supertrend", inline = "S_1")
+s1_type = input.string("EMA", title = "Ma-Type", options = ["SMA", "EMA", "HH / LL"], group = "Supertrend", inline = "S_1", tooltip = info_s1_len)
+
+s1_atr_len = input.int(34, title = "Atr-Len", group = "Supertrend", inline = "S_2")
+s1_atr_mult = input.float(4.25, title = "Atr-Mult", group = "Supertrend", inline = "S_2", tooltip = info_s1_atr)
+
+s1_incl = input.bool(true, title = "Include-ZigZag", group = "Supertrend", inline = "S_0", tooltip = info_s1_incl)
+
+s1_bull = input.color(color.green, title = "UpTrend", group = "Supertrend", inline = "S_3")
+s1_bear = input.color(color.red, title = "DownTrend", group = "Supertrend", inline = "S_3")
+s1_line = input.int(1, title = "Line", group = "Supertrend", inline = "S_3")
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+//- Functions -//
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Function: Modified MTF Relative Strength Index
+f_rsi(_src, _len, _mtf, _type)=>
+
+    _change = _src - _src[_mtf]
+    
+    _up = math.max(_change, 0)
+    _down = (-math.min(_change, 0))
+    
+    _up_change = _type == "Wilders" ? ta.rma(_up, (_len * _mtf)) :
+                 _type == "Cutlers" ? ta.sma(_up, (_len * _mtf)) : na
+
+    _down_change = _type == "Wilders" ? ta.rma(_down, (_len * _mtf)) :
+                   _type == "Cutlers" ? ta.sma(_down, (_len * _mtf)) : na
+    
+    _rsi = _down_change == 0 ? 100 : 
+           _up_change == 0 ? 0 : 
+           100 - (100 / (1 + _up_change / _down_change))
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Function: ZigZag
+f_zz(_dir, _high, _low)=>
+
+    _up = _dir == 1
+    _down = _dir == -1
+    
+    _peak = 0.0
+    _peak := _high > _peak[1] and _up or _down[1] and _up ? _high : 
+             nz(_peak[1])
+
+    _bottom = 0.0
+    _bottom := _low < _bottom[1] and _down or _up[1] and _down ? _low : 
+               nz(_bottom[1])
+
+    _zz = _up and _down[1] ? _bottom[1] : 
+          _up[1] and _down ? _peak[1] : na
+    _top = _down and _up[1] ? _peak[1] : na
+    _bot = _up and _down[1] ? _bottom[1] : na
+    [_zz, _top, _bot]
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Function: Modified QQE 
+f_qqe(_len, _mtf, _type, _smooth, _atr_mult)=>
+    
+    _wilders =  _len * 2 - 1 
+    
+    _up = 0.0
+    _up_rsi = f_rsi(low, _len, _mtf, _type)
+    _up_ema = ta.ema(_up_rsi, _smooth)
+    _up_atr = math.abs(_up_ema[1] - _up_ema)
+    _up_diff = ta.ema(ta.ema(_up_atr, _wilders), _wilders) * _atr_mult
+    _up_ma = _up_ema - _up_diff
+    _up := _up_ema[1] > _up[1] and _up_ema > _up[1] ? math.max(_up_ma, _up[1]) : _up_ma
+    
+    _dn = 0.0
+    _dn_rsi = f_rsi(high, _len, _mtf, _type)
+    _dn_ema = ta.ema(_dn_rsi, _smooth)
+    _dn_atr = math.abs(_dn_ema[1] - _dn_ema)
+    _dn_diff = ta.ema(ta.ema(_dn_atr, _wilders), _wilders) * _atr_mult
+    _dn_ma = _dn_ema + _dn_diff
+    _dn := _dn_ema[1] < _dn[1] and _dn_ema < _dn[1] ? math.min(_dn_ma, _dn[1]) : _dn_ma
+    
+    _trend = 0
+    _trend := ta.crossover(_dn_ema, _dn[1]) ? 1 : 
+              ta.crossunder(_up_ema, _up[1]) ? -1 : 
+              nz(_trend[1], _trend)
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Function: Supertrend
+f_supertrend(_top, _bot, _incl, _len, _type, _atr_len, _atr_mult)=>
+    
+    _atr = ta.atr(_atr_len) * _atr_mult
+    
+    _up_ma = _type == "EMA" ? ta.ema(low[1], _len) : 
+             _type == "SMA" ? ta.sma(low[1], _len) : 
+             _type == "HH / LL" ? ta.lowest(low[1], _len) : na
+    _up_b = _incl ? _bot[1] - _atr : na
+    _up = _up_ma - _atr
+    _up := low[1] > _up[1] ? math.max(_up, _up[1], nz(_up_b, _up - 1)) : _up
+    
+    _dn_ma = _type == "EMA" ? ta.ema(high[1], _len) : 
+             _type == "SMA" ? ta.sma(high[1], _len) : 
+             _type == "HH / LL" ? ta.highest(high[1], _len) : na
+    _dn_t = _incl ? _top[1] + _atr : na
+    _dn = _dn_ma + _atr
+    _dn := high[1] < _dn[1] ? math.min(_dn, _dn[1], nz(_dn_t, _dn + 1)) : _dn
+    
+    _trend = 0
+    _trend := ta.crossover(high[1], _dn[1]) ? 1 :
+              ta.crossunder(low[1], _up[1]) ? -1 :
+              nz(_trend[1], _trend)
+    [_trend, _up, _dn]
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+//- Calculations -//
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Calc: Rsi QQE ZigZag 
+qqe_trend = f_qqe(r1_len, r1_mtf, r1_type, r1_smooth, r1_mult)
+[zz, zz_top, zz_bot] = f_zz(qqe_trend, high, low)
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Calc: Supertrend
+[s_trend, s_up, s_dn] = f_supertrend(zz_top, zz_bot, s1_incl, s1_len, s1_type, s1_atr_len, s1_atr_mult)
+
+st_up = s_trend == 1 ? s_up : na
+st_dn = s_trend == -1 ? s_dn : na
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Calc: RSI QQE Divergence
+rsi = f_rsi(d1_src, r1_len, r1_mtf, r1_type)
+[rsi_zz, rsi_top, rsi_bot] = f_zz(qqe_trend, rsi, rsi)
+
+prev_bot_1 = ta.valuewhen(zz_bot, zz_bot, 1)
+prev_bot_2 = ta.valuewhen(zz_bot, zz_bot, 2)
+prev_bot_3 = ta.valuewhen(zz_bot, zz_bot, 3)
+
+prev_top_1 = ta.valuewhen(zz_top, zz_top, 1)
+prev_top_2 = ta.valuewhen(zz_top, zz_top, 2)
+prev_top_3 = ta.valuewhen(zz_top, zz_top, 3)
+
+rsi_prev_bot_1 = ta.valuewhen(rsi_bot, rsi_bot, 1)
+rsi_prev_bot_2 = ta.valuewhen(rsi_bot, rsi_bot, 2)
+rsi_prev_bot_3 = ta.valuewhen(rsi_bot, rsi_bot, 3)
+
+rsi_prev_top_1 = ta.valuewhen(rsi_top, rsi_top, 1)
+rsi_prev_top_2 = ta.valuewhen(rsi_top, rsi_top, 2)
+rsi_prev_top_3 = ta.valuewhen(rsi_top, rsi_top, 3)
+
+pos_limit_1 = rsi_bot < d1_botlimit and rsi_prev_bot_1 < d1_botlimit ? true : false
+pos_limit_2 = rsi_bot < d1_botlimit and rsi_prev_bot_2 < d1_botlimit ? true : false
+pos_limit_3 = rsi_bot < d1_botlimit and rsi_prev_bot_3 < d1_botlimit ? true : false
+
+pos_limit_4 = rsi_bot < d2_botlimit and rsi_prev_bot_1 < d2_botlimit ? true : false
+pos_limit_5 = rsi_bot < d2_botlimit and rsi_prev_bot_2 < d2_botlimit ? true : false
+pos_limit_6 = rsi_bot < d2_botlimit and rsi_prev_bot_3 < d2_botlimit ? true : false
+
+neg_limit_1 = rsi_top > d1_toplimit and rsi_prev_top_1 > d1_toplimit ? true : false
+neg_limit_2 = rsi_top > d1_toplimit and rsi_prev_top_2 > d1_toplimit ? true : false
+neg_limit_3 = rsi_top > d1_toplimit and rsi_prev_top_3 > d1_toplimit ? true : false
+
+neg_limit_4 = rsi_top > d2_toplimit and rsi_prev_top_1 > d2_toplimit ? true : false
+neg_limit_5 = rsi_top > d2_toplimit and rsi_prev_top_2 > d2_toplimit ? true : false
+neg_limit_6 = rsi_top > d2_toplimit and rsi_prev_top_3 > d2_toplimit ? true : false
+
+pos_div_1 = zz_bot < prev_bot_1 and rsi_bot > rsi_prev_bot_1 and pos_limit_1 ? true : false
+pos_div_2 = zz_bot < prev_bot_2 and rsi_bot > rsi_prev_bot_2 and pos_limit_2 ? true : false
+pos_div_3 = zz_bot < prev_bot_3 and rsi_bot > rsi_prev_bot_3 and pos_limit_3 ? true : false
+
+pos_con_1 = zz_bot > prev_bot_1 and rsi_bot < rsi_prev_bot_1 and pos_limit_4 ? true : false
+pos_con_2 = zz_bot > prev_bot_2 and rsi_bot < rsi_prev_bot_2 and pos_limit_5 ? true : false
+pos_con_3 = zz_bot > prev_bot_3 and rsi_bot < rsi_prev_bot_3 and pos_limit_6 ? true : false
+
+neg_div_1 = zz_top > prev_top_1 and rsi_top < rsi_prev_top_1 and neg_limit_1 ? true : false
+neg_div_2 = zz_top > prev_top_2 and rsi_top < rsi_prev_top_2 and neg_limit_2 ? true : false
+neg_div_3 = zz_top > prev_top_3 and rsi_top < rsi_prev_top_3 and neg_limit_3 ? true : false
+
+neg_con_1 = zz_top < prev_top_1 and rsi_top > rsi_prev_top_1 and neg_limit_4 ? true : false
+neg_con_2 = zz_top < prev_top_2 and rsi_top > rsi_prev_top_2 and neg_limit_5 ? true : false
+neg_con_3 = zz_top < prev_top_3 and rsi_top > rsi_prev_top_3 and neg_limit_6 ? true : false
+
+pos_div_add = d1_pp == "1" ? pos_div_1 :
+          d1_pp == "2" ? pos_div_1 or pos_div_2 :
+          d1_pp == "3" ? pos_div_1 or pos_div_2 or pos_div_3 : false
+pos_div = d1_show == true ? pos_div_add : false
+
+pos_con_add = d1_pp == "1" ? pos_con_1 :
+          d1_pp == "2" ? pos_con_1 or pos_con_2 :
+          d1_pp == "3" ? pos_con_1 or pos_con_2 or pos_con_3 : false
+pos_con = d2_show == true ? pos_con_add : false
+
+neg_div_add = d1_pp == "1" ? neg_div_1 :
+          d1_pp == "2" ? neg_div_1 or neg_div_2 :
+          d1_pp == "3" ? neg_div_1 or neg_div_2 or neg_div_3 : false
+neg_div = d1_show == true ? neg_div_add : false
+
+neg_con_add = d1_pp == "1" ? neg_con_1 :
+          d1_pp == "2" ? neg_con_1 or neg_con_2 :
+          d1_pp == "3" ? neg_con_1 or neg_con_2 or neg_con_3 : false
+neg_con = d2_show == true ? neg_con_add : false
+
+div_col = pos_div ? l1_pos :
+          neg_div ? l1_neg : 
+          pos_con ? l2_pos :
+          neg_con ? l2_neg : na
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Calc: ZigZag Continuation Labels
+incr_bull = zz_bot > prev_bot_1 ? true : false
+decr_bull = zz_bot < prev_bot_1 ? true : false
+incr_bear = zz_top < prev_top_1 ? true : false
+decr_bear = zz_top > prev_top_1 ? true : false
+
+zz_col = decr_bull and pos_div == true ? l1_pos : 
+         decr_bear and neg_div == true ? l1_neg : 
+         incr_bull and pos_div == true ? l1_pos :
+         incr_bear and neg_div == true ? l1_neg :
+         
+         decr_bull and pos_con == true ? l2_pos :
+         decr_bear and neg_con == true ? l2_neg :
+         incr_bull and pos_con == true ? l2_pos : 
+         incr_bear and neg_con == true ? l2_neg :
+         
+         decr_bull and pos_div == false and pos_con == false ? l1_bear :
+         decr_bear and neg_div == false and neg_con == false ? l1_bull :
+         incr_bull and pos_div == false and pos_con == false ? l1_bull :
+         incr_bear and neg_div == false and neg_con == false ? l1_bear : color.new(color.white, 100)
+
+zz_txt = decr_bull and pos_div == true ? "LL\nDiv▲" : 
+         decr_bear and neg_div == true ? "HH\nDiv▼" : 
+         incr_bull and pos_div == true ? "HL\nDiv▲" :
+         incr_bear and neg_div == true ? "LH\nDiv▼" :
+         
+         decr_bull and pos_con == true ? "LL\nConv▲" :
+         decr_bear and neg_con == true ? "HH\nConv▼" :
+         incr_bull and pos_con == true ? "HL\nConv▲" : 
+         incr_bear and neg_con == true ? "LH\nConv▼" :
+         
+         decr_bull and pos_div == false and pos_con == false ? "LL" :
+         decr_bear and neg_div == false and neg_con == false ? "HH" :
+         incr_bull and pos_div == false and pos_con == false ? "HL" :
+         incr_bear and neg_div == false and neg_con == false ? "LH" : "none"
+
+lbl_col = color.new(color.white, 100)
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+//- Drawings -//
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Draw: ZigZag
+plot(zz, title = "ZigZag", color = l1_zz, linewidth = l1_line, editable = true)
+plot(zz, title = "Pivots", color = zz_col, linewidth = l1_points, style = plot.style_circles, editable = true)
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Draw: Supertrend
+plot(s1_show ? st_up : na, title = "Up-Trend", color = s1_bull, linewidth = s1_line, editable = true, style = plot.style_linebr)
+plot(s1_show ? st_dn : na, title = "Down-Trend", color = s1_bear, linewidth = s1_line, editable = true, style = plot.style_linebr)
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Draw: Divergence Labels
+barcolor(div_col, editable = true)
+label.new(x = zz_bot ? bar_index : na , y = zz_bot, text = zz_txt, textcolor = zz_col, color = lbl_col, style = label.style_label_up, size = size.small)
+label.new(x = zz_top ? bar_index : na , y = zz_top, text = zz_txt, textcolor = zz_col, color = lbl_col, style = label.style_label_down, size = size.small)
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+//- Alters -//
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+// Alert: ZigZag Continuation
+alertcondition(incr_bull, title = "HL", message = "HL")
+alertcondition(decr_bear, title = "HH", message = "HH")
+alertcondition(incr_bear, title = "LH", message = "LH")
+alertcondition(decr_bull, title = "LL", message = "LL")
+alertcondition(pos_div, title = "Pos Div", message = "Pos Div")
+alertcondition(neg_div, title = "Neg Div", message = "Neg Div")
+alertcondition(pos_con, title = "Pos Conv", message = "Pos Conv")
+alertcondition(neg_con, title = "Neg Conv", message = "Neg Conv")
+//-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//

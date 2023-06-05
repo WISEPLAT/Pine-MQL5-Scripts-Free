@@ -1,0 +1,129 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © HeWhoMustNotBeNamed
+
+//@version=4
+study("ZigZag Supertrend", shorttitle="ZZ-Supertrend", overlay=true, max_lines_count=500, max_labels_count=500)
+source=input(close)
+Length = input(5, minval=0, step=5)
+DeviationThreshold = 0
+history = input(2, step=1, minval=2)
+waitForConfirmation = input(true)
+waitForClose = input(true)
+
+atrPeriods = input(22, step=5)
+atrMult = input(1, step=0.5)
+var zigzaglines = array.new_line(0)
+var zigzagpivots = array.new_float(0)
+int max_array_size = history
+
+pivots(length, highSource, lowSource)=>
+    float ph = highestbars(highSource, length) == 0 ? highSource : na
+    float pl = lowestbars(lowSource, length) == 0 ? lowSource : na
+    dir = 0
+    dir := iff(ph and na(pl), 1, iff(pl and na(ph), -1, dir[1]))
+    [dir, ph, pl]
+
+get_edir(dir, y2)=>
+    eDir = dir
+    if(array.size(zigzaglines) > 0)
+        lastLine = array.get(zigzaglines, 0)
+        lastPivot = line.get_y1(lastLine)
+        eDir := (dir*y2 > dir*lastPivot? 2 : 1) * dir
+    eDir
+
+add_to_zigzaglines(x1, y1 , x2, y2, dir)=>
+    eDir = get_edir(dir, y2)
+    zgColor = color.new(#FFFFFF, 100)
+    zline = line.new(x1=x1, y1=y1, 
+         x2 = x2, y2=y2,
+         color=zgColor, width=2, style=line.style_solid)
+    array.unshift(zigzaglines, zline)
+
+add_to_zigzag(dir, dirchanged, ph, pl, index, highSource, lowSource)=>
+    value = (dir == 1? ph : pl)
+    
+    lowestVal = lowest(lowSource, Length)
+    highestVal = highest(highSource, Length)
+    lowestBar = lowestbars(lowSource, Length)
+    highestBar = highestbars(highSource,Length)
+    y1= dir == 1? lowestVal : highestVal
+    x1 = bar_index + (dir == 1? lowestBar : highestBar)
+    x2 = index
+    y2 = value
+    skip = false
+    if(array.size(zigzaglines) > 0)
+        lastLine = array.get(zigzaglines, 0)
+        lastValue = line.get_y2(lastLine)
+        lastIndex = line.get_x2(lastLine)
+        
+        if(not dirchanged)
+            if(dir == 1 and value < lastValue) or (dir == -1 and value > lastValue)
+                skip := true
+            else
+                line.delete(array.shift(zigzaglines))
+                skip := false
+                
+        if(array.size(zigzaglines) > 0)
+            lastLine := array.get(zigzaglines, 0)
+            lastValue := line.get_y2(lastLine)
+            lastIndex := line.get_x2(lastLine)
+            x1 := lastIndex
+            y1 := lastValue
+
+    outsideDeviationThreshold = ((abs(y1-y2)*100/y1) > DeviationThreshold)
+    if(outsideDeviationThreshold and not skip)
+        add_to_zigzaglines(x1, y1 , x2, y2, dir)
+    if array.size(zigzaglines) > max_array_size
+        line.delete(array.pop(zigzaglines))
+
+zigzag(length, DeviationThreshold, highSource, lowSource)=>
+    [dir, ph, pl] = pivots(length, highSource, lowSource)
+    dirchanged = change(dir)
+    if(ph or pl)
+        add_to_zigzag(dir, dirchanged, ph, pl, bar_index, highSource, lowSource)
+
+get_high_low()=>
+    array.clear(zigzagpivots)
+    startIndex = waitForConfirmation? 1 : 0
+    if(array.size(zigzaglines) > startIndex)
+        for i=startIndex to array.size(zigzaglines)-1
+            zgLine = array.get(zigzaglines, i)
+            y1 = line.get_y1(zgLine)
+            y2 = line.get_y2(zgLine)
+            array.unshift(zigzagpivots,y1)
+            array.unshift(zigzagpivots,y2)
+        
+    top = array.max(zigzagpivots)
+    bottom = array.min(zigzagpivots)
+    [top, bottom]
+
+supertrend_zg(top, bottom)=>
+    dir = 1
+    prevDir = nz(dir[1], dir)
+    
+    atrDiff = atr(atrPeriods) * atrMult
+    buyStop = bottom - atrDiff
+    buyStopPrev = nz(buyStop[1], buyStop)
+    sellStop = top + atrDiff
+    sellStopPrev = nz(sellStop[1], sellStop)
+    
+    buyStop := prevDir == 1? max(buyStop, buyStopPrev) : buyStop
+    sellStop := prevDir == -1? min(sellStop, sellStopPrev) : sellStop
+    
+    bullishCrossover = crossover(waitForClose? close : high, sellStopPrev)
+    bearishCrossunder = crossunder(waitForClose? close : low, buyStopPrev)
+    dir := (prevDir == 1 and bearishCrossunder)? -1 :
+                 (prevDir == -1 and bullishCrossover)? 1:
+                 prevDir
+    [dir, buyStop, sellStop]
+    
+highSource = source == close? high : source
+lowSource = source == close? low : source
+
+zigzag(Length, DeviationThreshold, highSource, lowSource)
+[top, bottom] = get_high_low()
+[dir, buyStop, sellStop] = supertrend_zg(top, bottom)
+
+plot(dir == 1? buyStop : na, color= color.green, title="BuyStop",linewidth=2, style=plot.style_linebr)
+plot(dir == -1? sellStop : na, color= color.red, title="SellStop",linewidth=2, style=plot.style_linebr)
+alertcondition(dir != dir[1], "Supertrend direction update", "Supertrend direction reversal observed")

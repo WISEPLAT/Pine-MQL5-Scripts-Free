@@ -1,0 +1,205 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © HeWhoMustNotBeNamed
+
+//   __    __            __       __  __                  __       __                        __      __    __              __      _______             __    __                                          __ 
+//  /  |  /  |          /  |  _  /  |/  |                /  \     /  |                      /  |    /  \  /  |            /  |    /       \           /  \  /  |                                        /  |
+//  $$ |  $$ |  ______  $$ | / \ $$ |$$ |____    ______  $$  \   /$$ | __    __   _______  _$$ |_   $$  \ $$ |  ______   _$$ |_   $$$$$$$  |  ______  $$  \ $$ |  ______   _____  ____    ______    ____$$ |
+//  $$ |__$$ | /      \ $$ |/$  \$$ |$$      \  /      \ $$$  \ /$$$ |/  |  /  | /       |/ $$   |  $$$  \$$ | /      \ / $$   |  $$ |__$$ | /      \ $$$  \$$ | /      \ /     \/    \  /      \  /    $$ |
+//  $$    $$ |/$$$$$$  |$$ /$$$  $$ |$$$$$$$  |/$$$$$$  |$$$$  /$$$$ |$$ |  $$ |/$$$$$$$/ $$$$$$/   $$$$  $$ |/$$$$$$  |$$$$$$/   $$    $$< /$$$$$$  |$$$$  $$ | $$$$$$  |$$$$$$ $$$$  |/$$$$$$  |/$$$$$$$ |
+//  $$$$$$$$ |$$    $$ |$$ $$/$$ $$ |$$ |  $$ |$$ |  $$ |$$ $$ $$/$$ |$$ |  $$ |$$      \   $$ | __ $$ $$ $$ |$$ |  $$ |  $$ | __ $$$$$$$  |$$    $$ |$$ $$ $$ | /    $$ |$$ | $$ | $$ |$$    $$ |$$ |  $$ |
+//  $$ |  $$ |$$$$$$$$/ $$$$/  $$$$ |$$ |  $$ |$$ \__$$ |$$ |$$$/ $$ |$$ \__$$ | $$$$$$  |  $$ |/  |$$ |$$$$ |$$ \__$$ |  $$ |/  |$$ |__$$ |$$$$$$$$/ $$ |$$$$ |/$$$$$$$ |$$ | $$ | $$ |$$$$$$$$/ $$ \__$$ |
+//  $$ |  $$ |$$       |$$$/    $$$ |$$ |  $$ |$$    $$/ $$ | $/  $$ |$$    $$/ /     $$/   $$  $$/ $$ | $$$ |$$    $$/   $$  $$/ $$    $$/ $$       |$$ | $$$ |$$    $$ |$$ | $$ | $$ |$$       |$$    $$ |
+//  $$/   $$/  $$$$$$$/ $$/      $$/ $$/   $$/  $$$$$$/  $$/      $$/  $$$$$$/  $$$$$$$/     $$$$/  $$/   $$/  $$$$$$/     $$$$/  $$$$$$$/   $$$$$$$/ $$/   $$/  $$$$$$$/ $$/  $$/  $$/  $$$$$$$/  $$$$$$$/ 
+//                                                                                                                                                                                                          
+//                                                                                                                                                                                                          
+//
+//@version=5
+indicator('Multi ZigZag', shorttitle='MZigZag', overlay=true, max_bars_back=1000, max_lines_count=500, max_labels_count=500)
+
+useAlternativeSource = input.bool(false, title='', group='Source', inline='src')
+source = input.source(close, title='Alternative Source', group='Source', inline='src')
+
+showStatTable = input.bool(true, title='Show Stats', group='Misc', inline='stats')
+max_array_size = input.int(20, step=20, title='', group='Misc', inline='stats')
+
+showZigZag1 = input.bool(true, title='L1 Length', group='Zigzag', inline='main')
+zigzag1Length = input.int(5, step=1, minval=3, title='', group='Zigzag', inline='main')
+zigzag1Color = input.color(color.rgb(66, 165, 245, 0), title='', group='Zigzag', inline='main')
+
+showZigZag2 = input.bool(true, title='L2 Length', group='Zigzag', inline='sub1')
+zigzag2Length = input.int(8, step=1, minval=2, title='', group='Zigzag', inline='sub1')
+zigzag2Color = input.color(color.rgb(153, 204, 102, 0), title='', group='Zigzag', inline='sub1')
+
+showZigZag3 = input.bool(true, title='L3 Length', group='Zigzag', inline='sub2')
+zigzag3Length = input.int(13, step=1, minval=2, title='', group='Zigzag', inline='sub2')
+zigzag3Color = input.color(color.rgb(251, 192, 45, 0), title='', group='Zigzag', inline='sub2')
+
+showZigZag4 = input.bool(true, title='L4 Length', group='Zigzag', inline='sub3')
+zigzag4Length = input.int(21, step=1, minval=2, title='', group='Zigzag', inline='sub3')
+zigzag4Color = input.color(color.rgb(244, 143, 177, 0), title='', group='Zigzag', inline='sub3')
+
+
+var zigzagpivots1 = array.new_float(0)
+var zigzagpivotbars1 = array.new_int(0)
+var zigzagpivotdirs1 = array.new_int(0)
+
+var zigzagpivots2 = array.new_float(0)
+var zigzagpivotbars2 = array.new_int(0)
+var zigzagpivotdirs2 = array.new_int(0)
+
+var zigzagpivots3 = array.new_float(0)
+var zigzagpivotbars3 = array.new_int(0)
+var zigzagpivotdirs3 = array.new_int(0)
+
+var zigzagpivots4 = array.new_float(0)
+var zigzagpivotbars4 = array.new_int(0)
+var zigzagpivotdirs4 = array.new_int(0)
+
+var zigzag1lines = array.new_line(0)
+var zigzag2lines = array.new_line(0)
+var zigzag3lines = array.new_line(0)
+var zigzag4lines = array.new_line(0)
+
+add_to_array(arr, val, maxItems) =>
+    array.unshift(arr, val)
+    if array.size(arr) > maxItems
+        array.pop(arr)
+
+pivots(length) =>
+    highsource = useAlternativeSource ? source : high
+    lowsource = useAlternativeSource ? source : low
+    float phigh = ta.highestbars(highsource, length) == 0 ? highsource : na
+    float plow = ta.lowestbars(lowsource, length) == 0 ? lowsource : na
+    [phigh, plow, bar_index, bar_index]
+
+addnewpivot(zigzagpivots, zigzagpivotbars, zigzagpivotdirs, value, bar, dir) =>
+    newDir = dir
+    if array.size(zigzagpivots) >= 2
+        LastPoint = array.get(zigzagpivots, 1)
+        newDir := dir * value > dir * LastPoint ? dir * 2 : dir
+        newDir
+    add_to_array(zigzagpivots, value, max_array_size)
+    add_to_array(zigzagpivotbars, bar, max_array_size)
+    add_to_array(zigzagpivotdirs, newDir, max_array_size)
+
+zigzagcore(phigh, plow, phighbar, plowbar, zigzagpivots, zigzagpivotbars, zigzagpivotdirs) =>
+    pDir = 1
+    newZG = false
+    doubleZG = phigh and plow
+    if array.size(zigzagpivots) >= 1
+        pDir := array.get(zigzagpivotdirs, 0)
+        pDir := pDir % 2 == 0 ? pDir / 2 : pDir
+        pDir
+
+    if (pDir == 1 and phigh or pDir == -1 and plow) and array.size(zigzagpivots) >= 1
+        pivot = array.shift(zigzagpivots)
+        pivotbar = array.shift(zigzagpivotbars)
+        pivotdir = array.shift(zigzagpivotdirs)
+        value = pDir == 1 ? phigh : plow
+        bar = pDir == 1 ? phighbar : plowbar
+
+        useNewValues = value * pivotdir > pivot * pivotdir
+        value := useNewValues ? value : pivot
+        bar := useNewValues ? bar : pivotbar
+        newZG := newZG or useNewValues
+        addnewpivot(zigzagpivots, zigzagpivotbars, zigzagpivotdirs, value, bar, pDir)
+
+    if pDir == 1 and plow or pDir == -1 and phigh
+        value = pDir == 1 ? plow : phigh
+        bar = pDir == 1 ? plowbar : phighbar
+        dir = pDir == 1 ? -1 : 1
+        newZG := true
+        addnewpivot(zigzagpivots, zigzagpivotbars, zigzagpivotdirs, value, bar, dir)
+
+    [newZG, doubleZG]
+
+zigzag(length, zigzagpivots, zigzagpivotbars, zigzagpivotdirs) =>
+    [phigh, plow, phighbar, plowbar] = pivots(length)
+    zigzagcore(phigh, plow, phighbar, plowbar, zigzagpivots, zigzagpivotbars, zigzagpivotdirs)
+
+draw_zg_line(idx1, idx2, zigzaglines, zigzagpivots, zigzagpivotbars, zigzagcolor, zigzagwidth, zigzagstyle) =>
+    if array.size(zigzagpivots) > 2
+        y1 = array.get(zigzagpivots, idx1)
+        y2 = array.get(zigzagpivots, idx2)
+        x1 = array.get(zigzagpivotbars, idx1)
+        x2 = array.get(zigzagpivotbars, idx2)
+        zline = line.new(x1=x1, y1=y1, x2=x2, y2=y2, color=zigzagcolor, width=zigzagwidth, style=zigzagstyle)
+        if array.size(zigzaglines) >= 1
+            lastLine = array.get(zigzaglines, 0)
+            if x2 == line.get_x2(lastLine) and y2 == line.get_y2(lastLine)
+                line.delete(lastLine)
+        array.unshift(zigzaglines, zline)
+        if array.size(zigzaglines) > max_array_size * 10
+            line.delete(array.pop(zigzaglines))
+
+draw_zigzag(doubleZG, zigzaglines, zigzagpivots, zigzagpivotbars, zigzagcolor, zigzagwidth, zigzagstyle) =>
+    if doubleZG
+        draw_zg_line(1, 2, zigzaglines, zigzagpivots, zigzagpivotbars, zigzagcolor, zigzagwidth, zigzagstyle)
+
+    if array.size(zigzagpivots) >= 2
+        draw_zg_line(0, 1, zigzaglines, zigzagpivots, zigzagpivotbars, zigzagcolor, zigzagwidth, zigzagstyle)
+
+getCellColorByDirection(dir) =>
+    dir == 2 ? color.green : dir == 1 ? color.lime : dir == -1 ? color.orange : dir == -2 ? color.red : color.silver
+
+[level1ZG, doublel1ZG] = zigzag(zigzag1Length, zigzagpivots1, zigzagpivotbars1, zigzagpivotdirs1)
+[level2ZG, doublel2ZG] = zigzag(zigzag2Length, zigzagpivots2, zigzagpivotbars2, zigzagpivotdirs2)
+[level3ZG, doublel3ZG] = zigzag(zigzag3Length, zigzagpivots3, zigzagpivotbars3, zigzagpivotdirs3)
+[level4ZG, doublel4ZG] = zigzag(zigzag4Length, zigzagpivots4, zigzagpivotbars4, zigzagpivotdirs4)
+
+
+if level1ZG and showZigZag1
+    draw_zigzag(doublel1ZG, zigzag1lines, zigzagpivots1, zigzagpivotbars1, zigzag1Color, 1, line.style_solid)
+
+if level2ZG and showZigZag2
+    draw_zigzag(doublel2ZG, zigzag2lines, zigzagpivots2, zigzagpivotbars2, zigzag2Color, 1, line.style_solid)
+
+if level1ZG and showZigZag3
+    draw_zigzag(doublel3ZG, zigzag3lines, zigzagpivots3, zigzagpivotbars3, zigzag3Color, 1, line.style_solid)
+
+if level2ZG and showZigZag4
+    draw_zigzag(doublel4ZG, zigzag4lines, zigzagpivots4, zigzagpivotbars4, zigzag4Color, 1, line.style_solid)
+
+var stats = table.new(position=position.top_right, columns=8, rows=max_array_size + 2, border_width=1)
+text_size = size.tiny
+if barstate.islast and showStatTable
+    if showZigZag1
+        table.cell(table_id=stats, column=0, row=0, text='Zigzag ' + str.tostring(zigzag1Length), bgcolor=color.black, text_color=color.white, text_size=text_size)
+        table.cell(table_id=stats, column=0, row=1, text='Price', bgcolor=color.black, text_color=color.white, text_size=text_size)
+        table.cell(table_id=stats, column=1, row=1, text='BarIndex', bgcolor=color.black, text_color=color.white, text_size=text_size)
+
+        for i = 0 to array.size(zigzagpivots1) - 1 by 1
+            bgcolor = getCellColorByDirection(array.get(zigzagpivotdirs1, i))
+            table.cell(table_id=stats, column=0, row=i + 2, text=str.tostring(array.get(zigzagpivots1, i)), bgcolor=bgcolor, text_size=text_size)
+            table.cell(table_id=stats, column=1, row=i + 2, text=str.tostring(array.get(zigzagpivotbars2, i)), bgcolor=bgcolor, text_size=text_size)
+
+    if showZigZag2
+        table.cell(table_id=stats, column=2, row=0, text='Zigzag ' + str.tostring(zigzag2Length), bgcolor=color.black, text_color=color.white, text_size=text_size)
+        table.cell(table_id=stats, column=2, row=1, text='Price', bgcolor=color.black, text_color=color.white, text_size=text_size)
+        table.cell(table_id=stats, column=3, row=1, text='BarIndex', bgcolor=color.black, text_color=color.white, text_size=text_size)
+
+        for i = 0 to array.size(zigzagpivots2) - 1 by 1
+            bgcolor = getCellColorByDirection(array.get(zigzagpivotdirs2, i))
+            table.cell(table_id=stats, column=2, row=i + 2, text=str.tostring(array.get(zigzagpivots2, i)), bgcolor=bgcolor, text_size=text_size)
+            table.cell(table_id=stats, column=3, row=i + 2, text=str.tostring(array.get(zigzagpivotbars2, i)), bgcolor=bgcolor, text_size=text_size)
+
+    if showZigZag3
+        table.cell(table_id=stats, column=4, row=0, text='Zigzag ' + str.tostring(zigzag3Length), bgcolor=color.black, text_color=color.white, text_size=text_size)
+        table.cell(table_id=stats, column=4, row=1, text='Price', bgcolor=color.black, text_color=color.white, text_size=text_size)
+        table.cell(table_id=stats, column=5, row=1, text='BarIndex', bgcolor=color.black, text_color=color.white, text_size=text_size)
+
+        for i = 0 to array.size(zigzagpivots3) - 1 by 1
+            bgcolor = getCellColorByDirection(array.get(zigzagpivotdirs3, i))
+            table.cell(table_id=stats, column=4, row=i + 2, text=str.tostring(array.get(zigzagpivots3, i)), bgcolor=bgcolor, text_size=text_size)
+            table.cell(table_id=stats, column=5, row=i + 2, text=str.tostring(array.get(zigzagpivotbars3, i)), bgcolor=bgcolor, text_size=text_size)
+
+    if showZigZag4
+        table.cell(table_id=stats, column=6, row=0, text='Zigzag ' + str.tostring(zigzag4Length), bgcolor=color.black, text_color=color.white, text_size=text_size)
+        table.cell(table_id=stats, column=6, row=1, text='Price', bgcolor=color.black, text_color=color.white, text_size=text_size)
+        table.cell(table_id=stats, column=7, row=1, text='BarIndex', bgcolor=color.black, text_color=color.white, text_size=text_size)
+
+        for i = 0 to array.size(zigzagpivots4) - 1 by 1
+            bgcolor = getCellColorByDirection(array.get(zigzagpivotdirs4, i))
+            table.cell(table_id=stats, column=6, row=i + 2, text=str.tostring(array.get(zigzagpivots4, i)), bgcolor=bgcolor, text_size=text_size)
+            table.cell(table_id=stats, column=7, row=i + 2, text=str.tostring(array.get(zigzagpivotbars4, i)), bgcolor=bgcolor, text_size=text_size)
+

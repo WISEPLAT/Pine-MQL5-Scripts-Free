@@ -1,0 +1,141 @@
+//@version=5
+
+indicator('zigzag support&resistance levels [LM]', shorttitle='Zigzag S/R [LM]', overlay=true)
+
+_1 = input(false, '══════ general setting ══════════════════════════════')
+i_drawLines = input(true, 'Draw lines or just labels')
+i_lineCount = input(10, 'Line count')
+i_extendLines = input(true, 'Extend lines')
+
+_2 = input(false, '══════ zigzag setting 1 ══════════════════════════════')
+i_showFirst = input(true, 'Show first')
+i_firstDepth = input(150, 'Depth')
+i_firstDeviation = input(24.0, 'Deviation')
+i_firstColor = input(color.red, 'Color')
+
+_3 = input(false, '══════ zigzag setting 2 ══════════════════════════════')
+i_showSecond = input(true, 'Show second')
+i_secondDepth = input(34, 'Depth')
+i_secondDeviation = input(6.0, 'Deviation')
+i_secondColor = input(color.orange, 'Color')
+
+_4 = input(false, '══════ zigzag setting 3 ══════════════════════════════')
+i_showThird = input(false, 'Show third')
+i_thirdDepth = input(14, 'Depth')
+i_thirdDeviation = input(3.0, 'Deviation')
+i_thirdColor = input(color.lime, 'Color')
+
+
+var zigZagArray = array.new_line()
+var zigZagLabelArray = array.new_label()
+
+f_zigzag(_depth, _deviation) =>
+    var lw = 1
+    var hg = 1
+    lw += 1
+    hg += 1
+    lowestValue = -ta.lowestbars(_depth)
+    highestValue = -ta.highestbars(_depth)
+    lowing = lw == lowestValue or low - low[lowestValue] > _deviation * syminfo.mintick
+    highing = hg == highestValue or high[highestValue] - high > _deviation * syminfo.mintick
+    lh = ta.barssince(not highing)
+    ll = ta.barssince(not lowing)
+    down = lh > ll
+    lower = low[lw] > low[lowestValue]
+    higher = high[hg] < high[highestValue]
+    if lw != lowestValue and (not down[1] or lower)
+        lw := lowestValue < hg ? lowestValue : 0
+        lw
+    if hg != highestValue and (down[1] or higher)
+        hg := highestValue < lw ? highestValue : 0
+        hg
+    x1 = down ? lw : hg
+    y1 = down ? low[lw] : high[hg]
+    lb = down ? label.style_label_up : label.style_label_down
+    [down != down[1], x1, y1, lw, hg, down]
+
+
+f_drawLine(_x1, _x2, _yValue, _lineColor) =>
+    line.new(x1=_x1, y1=_yValue, x2=_x2, y2=_yValue, color=_lineColor, style=line.style_dotted, width=2)
+
+f_drawLabel(_x, _y, _textColor) =>
+    label.new(_x, _y, '         ' + str.tostring(_y), xloc.bar_index, yloc.price, #00000000, label.style_none, _textColor)
+
+f_extendArray(_lineArray, _extendLines) =>
+    if array.size(_lineArray) > 0
+        for _i = array.size(_lineArray) - 1 to 0 by 1
+
+            x2 = line.get_x2(array.get(_lineArray, _i))
+            yValue = line.get_y1(array.get(_lineArray, _i))
+
+            if _extendLines or bar_index - 1 == x2 and not(high > yValue and low < yValue)
+                line.set_x2(array.get(_lineArray, _i), bar_index)
+
+
+f_drawLabelSemafor(_switch, _x1, _y1, _lw, _hg, _down, _colorLine, _size) =>
+    label point = na
+    if _down != _down[1]
+        nx = _down ? _hg : _lw
+        point := label.new(bar_index - nx, _down ? high[nx] : low[nx], color=_colorLine, style=label.style_circle, size=_size)
+        point
+
+f_addLine(_switch, _x1, _y1, _lw, _hg, _down, _colorLine) =>
+    if _switch
+        line l = na
+        label lab = na
+
+        nx = _down ? _hg : _lw
+        yValue = _down ? high[nx] : low[nx]
+        x1 = bar_index - nx
+        x2 = bar_index
+
+        if _down != _down[1]
+            l := f_drawLine(x1, x2, yValue, _colorLine)
+            lab := f_drawLabel(x1, yValue, _colorLine)
+            lab
+
+        if array.size(zigZagArray) == i_lineCount
+            line.delete(array.shift(zigZagArray))
+            label.delete(array.shift(zigZagLabelArray))
+        array.push(zigZagArray, l)
+        array.push(zigZagLabelArray, lab)
+
+[switch1, x11, y11, lw1, hg1, down1] = f_zigzag(i_firstDepth, i_firstDeviation)
+[switch2, x12, y12, lw2, hg2, down2] = f_zigzag(i_secondDepth, i_secondDeviation)
+[switch3, x13, y13, lw3, hg3, down3] = f_zigzag(i_thirdDepth, i_thirdDeviation)
+
+switch_1 = switch1 or switch2 or switch3
+
+
+if not i_drawLines
+    if i_showFirst
+        f_drawLabelSemafor(switch1, x11, y11, lw1, hg1, down1, i_firstColor, size.normal)
+
+    if i_showSecond
+        f_drawLabelSemafor(switch2, x12, y12, lw2, hg2, down2, i_secondColor, size.small)
+
+    if i_showThird
+        f_drawLabelSemafor(switch3, x13, y13, lw3, hg3, down3, i_thirdColor, size.tiny)
+
+if i_drawLines
+    if i_showFirst
+        f_addLine(switch1, x11, y11, lw1, hg1, down1, i_firstColor)
+
+    if i_showSecond
+        f_addLine(switch2, x12, y12, lw2, hg2, down2, i_secondColor)
+
+    if i_showThird
+        f_addLine(switch3, x13, y13, lw3, hg3, down3, i_thirdColor)
+
+    f_extendArray(zigZagArray, i_extendLines)
+
+
+if switch_1
+    alertText = 'New levels have been confirmed:\n'
+    alertText := switch1 and i_showFirst ? alertText + 'first setting: ' + str.tostring(y11) + '\n' : alertText
+    alertText := switch2 and i_showSecond ? alertText + 'second setting: ' + str.tostring(y12) + '\n' : alertText
+    alertText := switch3 and i_showThird ? alertText + 'third setting: ' + str.tostring(y13) + '\n' : alertText
+    if switch1 and i_showFirst or switch2 and i_showSecond or switch3 and i_showThird
+        alert(alertText)
+
+

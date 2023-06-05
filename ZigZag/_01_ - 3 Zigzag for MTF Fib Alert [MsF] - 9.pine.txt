@@ -1,0 +1,437 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Trader_Morry
+
+//@version=5
+indicator(title='3 Zigzag for MTF Fib Alert [MsF]', shorttitle='3 ZigZag MTF Fib', overlay=true, max_bars_back = 5000)
+
+////////
+// Input values 
+// [
+var GRP1 = "--- Zigzag setting 1 ---"
+prd1        = input.int(8, "Period", minval=1, step=1, group = GRP1)
+upcol1      = input.color(defval = color.lime, title = "Up Color", group = GRP1)
+dncol1      = input.color(defval = color.red, title = "Down Color", group = GRP1)
+zz1style    = input.string(defval = "Dashed", title = "Line Style", options = ["Solid", "Dashed", "Dotted"], group = GRP1)
+zz1width    = input.int(defval = 2, title = "Line Width", minval = 1, maxval = 4, group = GRP1)
+cLeg1       = input.string(defval = "Previous", title = "Choice ZigZag Leg for Fib", options = ["Latest", "Previous", "N-Calculation"], group = GRP1)
+showZZ1     = input.bool(defval = true, title = "Show Zigzag", group = GRP1, inline = "show")
+showFIB1    = input.bool(defval = true, title = "Show Fib", group = GRP1, inline = "show")
+var GRP2 = "--- Zigzag setting 2 ---"
+prd2        = input.int(20, "Period", minval=1, step=1, group = GRP2)
+upcol2      = input.color(defval = color.olive, title = "Up Color", group = GRP2)
+dncol2      = input.color(defval = color.purple, title = "Down Color", group = GRP2)
+zz2style    = input.string(defval = "Solid", title = "Line Style", options = ["Solid", "Dashed", "Dotted"], group = GRP2)
+zz2width    = input.int(defval = 2, title = "Line Width", minval = 1, maxval = 4, group = GRP2)
+cLeg2       = input.string(defval = "Latest", title = "Choice ZigZag Leg for Fib", options = ["Latest", "Previous"], group = GRP2)
+showZZ2     = input.bool(defval = true, title = "Show Zigzag", group = GRP2, inline = "show")
+showFIB2    = input.bool(defval = true, title = "Show Fib", group = GRP2, inline = "show")
+showHL2     = input.bool(defval = false, title = "H.Line", group = GRP2, inline = "show")
+fibolinecol2= input.color(defval=color.white, title = "", group = GRP2, inline = "show")
+labelcol2   = fibolinecol2
+var GRP3 = "--- Zigzag setting 3 ---"
+prd3        = input.int(100, "Period", minval=1, step=1, group = GRP3)
+upcol3      = input.color(defval = color.blue, title = "Up Color", group = GRP3)
+dncol3      = input.color(defval = color.orange, title = "Down Color", group = GRP3)
+zz3style    = input.string(defval = "Solid", title = "Line Style", options = ["Solid", "Dashed", "Dotted"], group = GRP3)
+zz3width    = input.int(defval = 2, title = "Line Width", minval = 1, maxval = 4, group = GRP3)
+cLeg3       = input.string(defval = "Latest", title = "Choice ZigZag Leg for Fib", options = ["Latest", "Previous"], group = GRP3)
+showZZ3     = input.bool(defval = true, title = "Show Zigzag", group = GRP3, inline = "show")
+showFIB3    = input.bool(defval = true, title = "Show Fib", group = GRP3, inline = "show")
+showHL3     = input.bool(defval = false, title = "H.Line", group = GRP3, inline = "show")
+fibolinecol3= input.color(defval=color.orange, title = "", group = GRP3, inline = "show")
+labelcol3   = fibolinecol3
+var GRP6 = "Zigzag Common setting"
+plotZZ      = input.bool(defval = false, title = "Zigzag -> Plot", group = GRP6)
+var GRP4 = "Fibonacci Common Color setting"
+fbCol0000_0236 = input.color(defval = color.rgb(255, 0, 0, 80), title = "Fib Color 0000_0236", group = GRP4)
+fbCol0236_0382 = input.color(defval = color.rgb(255, 152, 0, 80), title = "Fib Color 0236_0382", group = GRP4)
+fbCol0382_0500 = input.color(defval = color.rgb(255, 235, 59, 80), title = "Fib Color 0382_0500", group = GRP4)
+fbCol0500_0618 = input.color(defval = color.rgb(0, 230, 118, 80), title = "Fib Color 0500_0618", group = GRP4)
+fbCol0618_0764 = input.color(defval = color.rgb(33, 150, 243, 80), title = "Fib Color 0618_0764", group = GRP4)
+fbCol0764_1000 = input.color(defval = color.rgb(156, 39, 176, 80), title = "Fib Color 0764_1000", group = GRP4)
+var GRP5 = "Horizontal Lines Common setting"
+fiboLineStyle2 = input.string(defval = "Solid", title = "Style", options = ["Solid", "Dashed", "Dotted"], group = GRP5)
+fibolinewidth2 = input.int(defval = 1, title = "Width", minval = 1, maxval = 4, group = GRP5)
+labelloc2      = input.string(defval='Left', title='Label', options=['Left', 'Right'], group = GRP5)
+fiboLineStyle3 = fiboLineStyle2
+fibolinewidth3 = fibolinewidth2
+labelloc3      = labelloc2
+// ]
+
+// Drawing Fibonacci Function
+// [
+var alertCode_1 = ""
+var alertCode_2 = ""
+var alertCode_3 = ""
+
+drawing_Fibonacci(z, x, a_cnt) =>
+    _range = x-z
+
+    // Fibonacci value caluculation
+    fib0000 = z
+    fib0236 = z+_range*0.236
+    fib0382 = z+_range*0.382
+    fib0500 = z+_range*0.500
+    fib0618 = z+_range*0.618
+    fib0764 = z+_range*0.764
+    fib1000 = x
+
+    // Fibonacci position calculation
+    x_begin = bar_index + 5 + (a_cnt * 20) 
+    x_end   = bar_index + 20 + (a_cnt * 20) 
+
+    // Drawing Fibonacci boxes
+    b000_236 = box(na)
+    if barstate.islast
+        b000_236 := box.new(x_begin, fib0000, x_end, fib0236, bgcolor=fbCol0000_0236, border_color=fbCol0000_0236)
+        box.delete(b000_236[1])
+
+    b236_382 = box(na)
+    if barstate.islast
+        b236_382 := box.new(x_begin, fib0236, x_end, fib0382, bgcolor=fbCol0236_0382, border_color=fbCol0236_0382)
+        box.delete(b236_382[1])
+
+    b382_500 = box(na)
+    if barstate.islast
+        b382_500 := box.new(x_begin, fib0382, x_end, fib0500, bgcolor=fbCol0382_0500, border_color=fbCol0382_0500)
+        box.delete(b382_500[1])
+
+    b500_618 = box(na)
+    if barstate.islast
+        b500_618 := box.new(x_begin, fib0500, x_end, fib0618, bgcolor=fbCol0500_0618, border_color=fbCol0500_0618)
+        box.delete(b500_618[1])
+
+    b618_764 = box(na)
+    if barstate.islast
+        b618_764 := box.new(x_begin, fib0618, x_end, fib0764, bgcolor=fbCol0618_0764, border_color=fbCol0618_0764)
+        box.delete(b618_764[1])
+
+    b764_1000 = box(na)
+    if barstate.islast
+        b764_1000 := box.new(x_begin, fib0764, x_end, fib1000, bgcolor=fbCol0764_1000, border_color=fbCol0764_1000)
+        box.delete(b764_1000[1])
+    // ]
+    // Noticification Judge
+    // [
+    alertCode = ""
+    if (((fib0000 > close and fib0000 <= close[1]) or (fib0000 < close and fib0000 >= close[1])))
+        alertCode := "fib0000"
+    if (((fib0236 > close and fib0236 <= close[1]) or (fib0236 < close and fib0236 >= close[1])))
+        alertCode := "fib0236"
+    if (((fib0382 > close and fib0382 <= close[1]) or (fib0382 < close and fib0382 >= close[1])))
+        alertCode := "fib0382"
+    if (((fib0500 > close and fib0500 <= close[1]) or (fib0500 < close and fib0500 >= close[1])))
+        alertCode := "fib0500"
+    if (((fib0618 > close and fib0618 <= close[1]) or (fib0618 < close and fib0618 >= close[1])))
+        alertCode := "fib0618"
+    if (((fib0764 > close and fib0764 <= close[1]) or (fib0764 < close and fib0764 >= close[1])))
+        alertCode := "fib0764"
+    if (((fib1000 > close and fib1000 <= close[1]) or (fib1000 < close and fib1000 >= close[1])))
+        alertCode := "fib1000"
+    alertCode
+    // ]
+// ]
+
+// Calculation zigzag
+// [
+float ph1 = ta.highestbars(high, prd1) == 0 ? high : na
+float pl1 = ta.lowestbars(low, prd1) == 0 ? low : na
+float ph2 = ta.highestbars(high, prd2) == 0 ? high : na
+float pl2 = ta.lowestbars(low, prd2) == 0 ? low : na
+float ph3 = ta.highestbars(high, prd3) == 0 ? high : na
+float pl3 = ta.lowestbars(low, prd3) == 0 ? low : na
+
+var dir1 = 0
+var dir2 = 0
+var dir3 = 0
+iff_1 = pl1 and na(ph1) ? -1 : dir1
+dir1 := ph1 and na(pl1) ? 1 : iff_1
+iff_2 = pl2 and na(ph2) ? -1 : dir2
+dir2 := ph2 and na(pl2) ? 1 : iff_2
+iff_3 = pl3 and na(ph3) ? -1 : dir3
+dir3 := ph3 and na(pl3) ? 1 : iff_3
+
+var max_array_size = 10  // [5, 2] matrix
+var zigzag1 = array.new_float(0)
+var zigzag2 = array.new_float(0)
+var zigzag3 = array.new_float(0)
+var fib_zigzag1 = array.new_float(0)
+var fib_zigzag2 = array.new_float(0)
+var fib_zigzag3 = array.new_float(0)
+oldzigzag1 = array.copy(zigzag1)
+oldzigzag2 = array.copy(zigzag2)
+oldzigzag3 = array.copy(zigzag3)
+
+add_to_zigzag(pointer, value, bindex) =>
+    array.unshift(pointer, bindex)
+    array.unshift(pointer, value)
+    if array.size(pointer) > max_array_size
+        array.pop(pointer)
+        array.pop(pointer)
+
+update_zigzag(pointer, value, bindex, dir) =>
+    if array.size(pointer) == 0
+        add_to_zigzag(pointer, value, bindex)
+    else
+        if dir == 1 and value > array.get(pointer, 0) or dir == -1 and value < array.get(pointer, 0)
+            array.set(pointer, 0, value)
+            array.set(pointer, 1, bindex)
+        0.
+
+// Add for Fibonacci array -> [H, L, H, L,...]
+add_to_fib_zigzag(pointer, value) =>
+    array.unshift(pointer, value)
+    if array.size(pointer) > max_array_size
+        array.pop(pointer)
+
+dir1changed = ta.change(dir1)
+if ph1 or pl1
+    if dir1changed
+        add_to_zigzag(zigzag1, dir1 == 1 ? ph1 : pl1, bar_index)
+    else
+        update_zigzag(zigzag1, dir1 == 1 ? ph1 : pl1, bar_index, dir1)
+
+dir2changed = ta.change(dir2)
+if ph2 or pl2
+    if dir2changed
+        add_to_zigzag(zigzag2, dir2 == 1 ? ph2 : pl2, bar_index)
+    else
+        update_zigzag(zigzag2, dir2 == 1 ? ph2 : pl2, bar_index, dir2)
+
+dir3changed = ta.change(dir3)
+if ph2 or pl2 or pl3
+    if dir3changed
+        add_to_zigzag(zigzag3, dir3 == 1 ? ph3 : pl3, bar_index)
+    else
+        update_zigzag(zigzag3, dir3 == 1 ? ph3 : pl3, bar_index, dir3)
+
+if array.size(zigzag1) >= 6
+    var line zzline1 = na
+    var label zzlabel1 = na
+    if array.get(zigzag1, 0) != array.get(oldzigzag1, 0) or array.get(zigzag1, 1) != array.get(oldzigzag1, 1)
+        if array.get(zigzag1, 2) == array.get(oldzigzag1, 2) and array.get(zigzag1, 3) == array.get(oldzigzag1, 3)
+            line.delete(zzline1)
+            label.delete(zzlabel1)
+        if showZZ1
+            zzline1 := line.new(x1=math.round(array.get(zigzag1, 1)), y1=array.get(zigzag1, 0), x2=math.round(array.get(zigzag1, 3)), y2=array.get(zigzag1, 2), color=plotZZ?color.rgb(255,255,255,100):dir1 == 1 ? upcol1 : dncol1, width=zz1width, style=zz1style == 'Dashed' ? line.style_dashed : (zz1style == 'Dotted') ? line.style_dotted : line.style_solid)
+            zzline1
+            zzlabel1 := plotZZ?label.new(x=math.round(array.get(zigzag1, 1)), y=array.get(zigzag1, 0), yloc=dir1==1?yloc.abovebar:yloc.belowbar, color=dir1 == 1 ? upcol1 : dncol1, size=size.tiny, style = label.style_circle):na
+        if showFIB1
+            if cLeg1 == "Latest"
+                add_to_fib_zigzag(fib_zigzag1, array.get(zigzag1, 0))
+                add_to_fib_zigzag(fib_zigzag1, array.get(zigzag1, 2))
+            else if cLeg1 == "Previous"
+                if line.get_y1(zzline1[1]) > 0
+                    add_to_fib_zigzag(fib_zigzag1, line.get_y1(zzline1[1]))
+            else // N-Caluculation
+                if line.get_y1(zzline1[1]) > 0
+                    add_to_fib_zigzag(fib_zigzag1, line.get_y1(zzline1[1]))
+                    add_to_fib_zigzag(fib_zigzag1, line.get_y2(zzline1[1]))
+
+// Drawing Fibonacci 1
+if array.size(fib_zigzag1) >= 2
+    if cLeg1 == "N-Calculation" and array.size(fib_zigzag1) >= 4
+        if array.get(fib_zigzag1, 0) > 0 and array.get(fib_zigzag1, 1) > 0 and array.get(fib_zigzag1, 2) > 0 and array.get(fib_zigzag1, 3) > 0
+            if dir1 == 1    // Up trend
+                y1 = array.get(fib_zigzag1, 1)
+                y2 = array.get(fib_zigzag1, 1)-array.get(fib_zigzag1, 2)+array.get(fib_zigzag1, 0)
+                alertCode_1 := drawing_Fibonacci(y1, y2, 0)
+            else            // Down trend
+                y1 = array.get(fib_zigzag1, 1)
+                y2 = array.get(fib_zigzag1, 1)-array.get(fib_zigzag1, 2)+array.get(fib_zigzag1, 0)
+                alertCode_1 := drawing_Fibonacci(y1, y2, 0)
+    else
+        alertCode_1 := drawing_Fibonacci(array.get(fib_zigzag1, 0), array.get(fib_zigzag1, 1), 0)
+
+if array.size(zigzag2) >= 6
+    var line zzline2 = na
+    var label zzlabel2 = na
+    if array.get(zigzag2, 0) != array.get(oldzigzag2, 0) or array.get(zigzag2, 1) != array.get(oldzigzag2, 1)
+        if array.get(zigzag2, 2) == array.get(oldzigzag2, 2) and array.get(zigzag2, 3) == array.get(oldzigzag2, 3)
+            line.delete(zzline2)
+            label.delete(zzlabel2)
+        if showZZ2
+            zzline2 := line.new(x1=math.round(array.get(zigzag2, 1)), y1=array.get(zigzag2, 0), x2=math.round(array.get(zigzag2, 3)), y2=array.get(zigzag2, 2), color=plotZZ?color.rgb(255,255,255,100):dir2 == 1 ? upcol2 : dncol2, width=zz2width, style=zz2style == 'Dashed' ? line.style_dashed : (zz2style == 'Dotted') ? line.style_dotted : line.style_solid)
+            zzline2
+            zzlabel2 := plotZZ?label.new(x=math.round(array.get(zigzag2, 1)), y=array.get(zigzag2, 0), yloc=dir2==1?yloc.abovebar:yloc.belowbar, color=dir2 == 1 ? upcol2 : dncol2, size=size.small, style = label.style_circle):na
+        if showFIB2
+            if cLeg2 == "Latest"
+                add_to_fib_zigzag(fib_zigzag2, array.get(zigzag2, 0))
+                add_to_fib_zigzag(fib_zigzag2, array.get(zigzag2, 2))
+            else
+                if line.get_y1(zzline2[1]) > 0
+                    add_to_fib_zigzag(fib_zigzag2, line.get_y1(zzline2[1]))
+
+// Drawing Fibonacci 2
+if array.size(fib_zigzag2) >= 2
+    alertCode_2 := drawing_Fibonacci(array.get(fib_zigzag2, 0), array.get(fib_zigzag2, 1), 1)
+
+// Drawing Horizontal Line 2
+// -------------------------------------------------------------------------------
+var fibo_ratios = array.new_float(0)
+shownlevels = 1
+if barstate.isfirst
+    array.push(fibo_ratios, 0.0)    
+    array.push(fibo_ratios, 1.0)    
+// -------------------------------------------------------------------------------
+var fibolinesPrev2 = array.new_line(0)
+var fibolabelsPrev2 = array.new_label(0)
+var fibolinesLatest2 = array.new_line(0)
+var fibolabelsLatest2 = array.new_label(0)
+// -------------------------------------------------------------------------------
+if cLeg2 != "Latest" and showHL2 and showFIB2 and array.size(zigzag2) >= 6 and barstate.islast
+    if array.size(fibolinesPrev2) > 0
+        for x = 0 to array.size(fibolinesPrev2) - 1 by 1
+            line.delete(array.get(fibolinesPrev2, x))
+            label.delete(array.get(fibolabelsPrev2, x))
+    if array.size(fibolinesPrev2) > 0
+        for x = 0 to array.size(fibolinesPrev2) - 1 by 1
+            line.delete(array.get(fibolinesPrev2, x))
+            label.delete(array.get(fibolabelsPrev2, x))
+
+    diff = array.get(zigzag2, 4) - array.get(zigzag2, 2)
+    stopit = false
+    for x = 0 to array.size(fibo_ratios) - 1 by 1
+        if stopit and x > shownlevels
+            break
+        array.unshift(fibolinesPrev2, line.new(x1=math.round(array.get(zigzag2, 5)), y1=array.get(zigzag2, 2) + diff * array.get(fibo_ratios, x), x2=bar_index, y2=array.get(zigzag2, 2) + diff * array.get(fibo_ratios, x), color=fibolinecol2, extend=extend.right, style=fiboLineStyle2 == 'Dashed' ? line.style_dashed : (zz1style == 'Dotted') ? line.style_dotted : line.style_solid, width=fibolinewidth2))
+        label_x_loc = labelloc2 == 'Left' ? math.round(array.get(zigzag2, 5)) - 1 : bar_index + 15
+//        array.unshift(fibolabelsPrev2, label.new(x=label_x_loc, y=array.get(zigzag2, 2) + diff * array.get(fibo_ratios, x), text=str.tostring(array.get(fibo_ratios, x), '#.###') + '(' + str.tostring(math.round_to_mintick(array.get(zigzag2, 2) + diff * array.get(fibo_ratios, x))) + ')', textcolor=labelcol2, style=label.style_none))
+        array.unshift(fibolabelsPrev2, label.new(x=label_x_loc, y=array.get(zigzag2, 2) + diff * array.get(fibo_ratios, x), text=str.tostring(math.round_to_mintick(array.get(zigzag2, 2) + diff * array.get(fibo_ratios, x))) , textcolor=labelcol2, style=label.style_none))
+        if dir2 == 1 and array.get(zigzag2, 2) + diff * array.get(fibo_ratios, x) > array.get(zigzag2, 0) or dir2 == -1 and array.get(zigzag2, 2) + diff * array.get(fibo_ratios, x) < array.get(zigzag2, 0)
+            stopit := true
+            stopit
+// Addition to © LonesomeTheBlue origial code ------------------------------------
+if cLeg2 == "Latest" and showHL2 and showFIB2 and array.size(zigzag2) >= 6 and barstate.islast
+    if array.size(fibolinesLatest2) > 0
+        for x = 0 to array.size(fibolinesLatest2) - 1 by 1
+            line.delete(array.get(fibolinesLatest2, x))
+            label.delete(array.get(fibolabelsLatest2, x))
+    if array.size(fibolinesLatest2) > 0
+        for x = 0 to array.size(fibolinesLatest2) - 1 by 1
+            line.delete(array.get(fibolinesLatest2, x))
+            label.delete(array.get(fibolabelsLatest2, x))
+
+    diff2 = array.get(zigzag2, 0) - array.get(zigzag2, 2)
+    stopit2 = false
+    for x = 0 to array.size(fibo_ratios) - 1 by 1
+        if stopit2 and x > shownlevels
+            break
+        array.unshift(fibolinesLatest2, line.new(x1=math.round(array.get(zigzag2, 3)), y1=array.get(zigzag2, 2) + diff2 * (1-array.get(fibo_ratios, x)), x2=bar_index, y2=array.get(zigzag2, 2) + diff2 * (1-array.get(fibo_ratios, x)), color=fibolinecol2, extend=extend.right, style=fiboLineStyle2 == 'Dashed' ? line.style_dashed : (zz1style == 'Dotted') ? line.style_dotted : line.style_solid, width=fibolinewidth2))
+        label_x_loc2 = labelloc2 == 'Left' ? math.round(array.get(zigzag2, 3)) - 1 : bar_index + 15
+//        array.unshift(fibolabelsLatest2, label.new(x=label_x_loc2, y=array.get(zigzag2, 2) + diff2 * (1-array.get(fibo_ratios, x)), text=str.tostring(array.get(fibo_ratios, x), '#.###') + '(' + str.tostring(math.round_to_mintick(array.get(zigzag2, 2) + diff2 * (1-array.get(fibo_ratios, x)))) + ')', textcolor=labelcol2, style=label.style_none))
+        array.unshift(fibolabelsLatest2, label.new(x=label_x_loc2, y=array.get(zigzag2, 2) + diff2 * (1-array.get(fibo_ratios, x)), text=str.tostring(math.round_to_mintick(array.get(zigzag2, 2) + diff2 * (1-array.get(fibo_ratios, x)))) , textcolor=labelcol2, style=label.style_none))
+        if dir2 == 1 and array.get(zigzag2, 2) + diff2 * array.get(fibo_ratios, x) > array.get(zigzag2, 0) or dir2 == -1 and array.get(zigzag2, 2) + diff2 * array.get(fibo_ratios, x) < array.get(zigzag2, 0)
+            stopit2 := true
+            stopit2
+// -------------------------------------------------------------------------------
+
+
+
+if array.size(zigzag3) >= 6
+    var line zzline3 = na
+    var label zzlabel3 = na
+    if array.get(zigzag3, 0) != array.get(oldzigzag3, 0) or array.get(zigzag3, 1) != array.get(oldzigzag3, 1)
+        if array.get(zigzag3, 2) == array.get(oldzigzag3, 2) and array.get(zigzag3, 3) == array.get(oldzigzag3, 3)
+            line.delete(zzline3)
+            label.delete(zzlabel3)
+        if showZZ3
+            zzline3 := line.new(x1=math.round(array.get(zigzag3, 1)), y1=array.get(zigzag3, 0), x2=math.round(array.get(zigzag3, 3)), y2=array.get(zigzag3, 2), color=plotZZ?color.rgb(255,255,255,100):dir3 == 1 ? upcol3 : dncol3, width=zz3width, style=zz3style == 'Dashed' ? line.style_dashed : (zz3style == 'Dotted') ? line.style_dotted : line.style_solid)
+            zzline3
+            zzlabel3 := plotZZ?label.new(x=math.round(array.get(zigzag3, 1)), y=array.get(zigzag3, 0), yloc=dir3==1?yloc.abovebar:yloc.belowbar, color=dir3 == 1 ? upcol3 : dncol3, size=size.normal, style = label.style_circle):na
+        if showFIB3
+            if cLeg3 == "Latest"
+                add_to_fib_zigzag(fib_zigzag3, array.get(zigzag3, 0))
+                add_to_fib_zigzag(fib_zigzag3, array.get(zigzag3, 2))
+            else
+                if line.get_y1(zzline3[1]) > 0
+                    add_to_fib_zigzag(fib_zigzag3, line.get_y1(zzline3[1]))
+
+// Drawing Fibonacci 3
+if array.size(fib_zigzag3) >= 2
+    alertCode_3 := drawing_Fibonacci(array.get(fib_zigzag3, 0), array.get(fib_zigzag3, 1), 2)
+// ]
+
+// Drawing Horizontal Line 3
+// -------------------------------------------------------------------------------
+var fibolinesPrev3 = array.new_line(0)
+var fibolabelsPrev3 = array.new_label(0)
+var fibolinesLatest3 = array.new_line(0)
+var fibolabelsLatest3 = array.new_label(0)
+// -------------------------------------------------------------------------------
+if cLeg3 != "Latest" and showHL3 and showFIB3 and array.size(zigzag3) >= 6 and barstate.islast
+    if array.size(fibolinesPrev3) > 0
+        for x = 0 to array.size(fibolinesPrev3) - 1 by 1
+            line.delete(array.get(fibolinesPrev3, x))
+            label.delete(array.get(fibolabelsPrev3, x))
+    if array.size(fibolinesPrev3) > 0
+        for x = 0 to array.size(fibolinesPrev3) - 1 by 1
+            line.delete(array.get(fibolinesPrev3, x))
+            label.delete(array.get(fibolabelsPrev3, x))
+
+    diff = array.get(zigzag3, 4) - array.get(zigzag3, 2)
+    stopit = false
+    for x = 0 to array.size(fibo_ratios) - 1 by 1
+        if stopit and x > shownlevels
+            break
+        array.unshift(fibolinesPrev3, line.new(x1=math.round(array.get(zigzag3, 5)), y1=array.get(zigzag3, 2) + diff * array.get(fibo_ratios, x), x2=bar_index, y2=array.get(zigzag3, 2) + diff * array.get(fibo_ratios, x), color=fibolinecol3, extend=extend.right, style=fiboLineStyle3 == 'Dashed' ? line.style_dashed : (zz1style == 'Dotted') ? line.style_dotted : line.style_solid, width=fibolinewidth3))
+        label_x_loc = labelloc3 == 'Left' ? math.round(array.get(zigzag3, 5)) - 1 : bar_index + 15
+//        array.unshift(fibolabelsPrev3, label.new(x=label_x_loc, y=array.get(zigzag3, 2) + diff * array.get(fibo_ratios, x), text=str.tostring(array.get(fibo_ratios, x), '#.###') + '(' + str.tostring(math.round_to_mintick(array.get(zigzag3, 2) + diff * array.get(fibo_ratios, x))) + ')', textcolor=labelcol3, style=label.style_none))
+        array.unshift(fibolabelsPrev3, label.new(x=label_x_loc, y=array.get(zigzag3, 2) + diff * array.get(fibo_ratios, x), text=str.tostring(math.round_to_mintick(array.get(zigzag3, 2) + diff * array.get(fibo_ratios, x))) , textcolor=labelcol3, style=label.style_none))
+        if dir3 == 1 and array.get(zigzag3, 2) + diff * array.get(fibo_ratios, x) > array.get(zigzag3, 0) or dir3 == -1 and array.get(zigzag3, 2) + diff * array.get(fibo_ratios, x) < array.get(zigzag3, 0)
+            stopit := true
+            stopit
+// Addition to © LonesomeTheBlue origial code ------------------------------------
+if cLeg3 == "Latest" and showHL3 and showFIB3 and array.size(zigzag3) >= 6 and barstate.islast
+    if array.size(fibolinesLatest3) > 0
+        for x = 0 to array.size(fibolinesLatest3) - 1 by 1
+            line.delete(array.get(fibolinesLatest3, x))
+            label.delete(array.get(fibolabelsLatest3, x))
+    if array.size(fibolinesLatest3) > 0
+        for x = 0 to array.size(fibolinesLatest3) - 1 by 1
+            line.delete(array.get(fibolinesLatest3, x))
+            label.delete(array.get(fibolabelsLatest3, x))
+
+    diff2 = array.get(zigzag3, 0) - array.get(zigzag3, 2)
+    stopit2 = false
+    for x = 0 to array.size(fibo_ratios) - 1 by 1
+        if stopit2 and x > shownlevels
+            break
+        array.unshift(fibolinesLatest3, line.new(x1=math.round(array.get(zigzag3, 3)), y1=array.get(zigzag3, 2) + diff2 * (1-array.get(fibo_ratios, x)), x2=bar_index, y2=array.get(zigzag3, 2) + diff2 * (1-array.get(fibo_ratios, x)), color=fibolinecol3, extend=extend.right, style=fiboLineStyle3 == 'Dashed' ? line.style_dashed : (zz1style == 'Dotted') ? line.style_dotted : line.style_solid, width=fibolinewidth3))
+        label_x_loc2 = labelloc3 == 'Left' ? math.round(array.get(zigzag3, 3)) - 1 : bar_index + 15
+//        array.unshift(fibolabelsLatest3, label.new(x=label_x_loc2, y=array.get(zigzag3, 2) + diff2 * (1-array.get(fibo_ratios, x)), text=str.tostring(array.get(fibo_ratios, x), '#.###') + '(' + str.tostring(math.round_to_mintick(array.get(zigzag3, 2) + diff2 * (1-array.get(fibo_ratios, x)))) + ')', textcolor=labelcol3, style=label.style_none))
+        array.unshift(fibolabelsLatest3, label.new(x=label_x_loc2, y=array.get(zigzag3, 2) + diff2 * (1-array.get(fibo_ratios, x)), text=str.tostring(math.round_to_mintick(array.get(zigzag3, 2) + diff2 * (1-array.get(fibo_ratios, x)))) , textcolor=labelcol3, style=label.style_none))
+        if dir3 == 1 and array.get(zigzag3, 2) + diff2 * array.get(fibo_ratios, x) > array.get(zigzag3, 0) or dir3 == -1 and array.get(zigzag3, 2) + diff2 * array.get(fibo_ratios, x) < array.get(zigzag3, 0)
+            stopit2 := true
+            stopit2
+// -------------------------------------------------------------------------------
+
+
+
+// ]
+// Fibonacci Notification
+// [
+alertcondition(alertCode_1 == "fib0000" , "Fib 1 - Crossing 0.00", "Fib 1 Crossing 0.00")
+alertcondition(alertCode_1 == "fib0236" , "Fib 1 - Crossing 23.6", "Fib 1 Crossing 23.6")
+alertcondition(alertCode_1 == "fib0382" , "Fib 1 - Crossing 38.2", "Fib 1 Crossing 38.2")
+alertcondition(alertCode_1 == "fib0500" , "Fib 1 - Crossing 50.0", "Fib 1 Crossing 50.0")
+alertcondition(alertCode_1 == "fib0618" , "Fib 1 - Crossing 61.8", "Fib 1 Crossing 61.8")
+alertcondition(alertCode_1 == "fib0764" , "Fib 1 - Crossing 76.4", "Fib 1 Crossing 76.4")
+alertcondition(alertCode_1 == "fib1000" , "Fib 1 - Crossing 100.0", "Fib 1 Crossing 100.0")
+
+alertcondition(alertCode_2 == "fib0000" , "Fib 2 - Crossing 0.00", "Fib 2 Crossing 0.00")
+alertcondition(alertCode_2 == "fib0236" , "Fib 2 - Crossing 23.6", "Fib 2 Crossing 23.6")
+alertcondition(alertCode_2 == "fib0382" , "Fib 2 - Crossing 38.2", "Fib 2 Crossing 38.2")
+alertcondition(alertCode_2 == "fib0500" , "Fib 2 - Crossing 50.0", "Fib 2 Crossing 50.0")
+alertcondition(alertCode_2 == "fib0618" , "Fib 2 - Crossing 61.8", "Fib 2 Crossing 61.8")
+alertcondition(alertCode_2 == "fib0764" , "Fib 2 - Crossing 76.4", "Fib 2 Crossing 76.4")
+alertcondition(alertCode_2 == "fib1000" , "Fib 2 - Crossing 100.0", "Fib 2 Crossing 100.0")
+
+alertcondition(alertCode_3 == "fib0000" , "Fib 3 - Crossing 0.00", "Fib 3 Crossing 0.00")
+alertcondition(alertCode_3 == "fib0236" , "Fib 3 - Crossing 23.6", "Fib 3 Crossing 23.6")
+alertcondition(alertCode_3 == "fib0382" , "Fib 3 - Crossing 38.2", "Fib 3 Crossing 38.2")
+alertcondition(alertCode_3 == "fib0500" , "Fib 3 - Crossing 50.0", "Fib 3 Crossing 50.0")
+alertcondition(alertCode_3 == "fib0618" , "Fib 3 - Crossing 61.8", "Fib 3 Crossing 61.8")
+alertcondition(alertCode_3 == "fib0764" , "Fib 3 - Crossing 76.4", "Fib 3 Crossing 76.4")
+alertcondition(alertCode_3 == "fib1000" , "Fib 3 - Crossing 100.0", "Fib 3 Crossing 100.0")
+// ]

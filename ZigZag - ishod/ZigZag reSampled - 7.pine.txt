@@ -1,0 +1,56 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © dy6m1
+
+//@version=4
+study("ZigZag reSampled", overlay = true)
+
+depth = input(15 , title = "Depth")
+length = input(7, title = "Backsteps")
+
+var bool upward = true
+var float lastlow = low
+var float lasthigh = high
+var int timelow = 1
+var int timehigh = 1
+var line trendline = na
+
+h = highest(high , depth)
+l = lowest(low , depth)
+
+
+if (upward)
+    if (low[length] < lastlow) and (l == low[length])
+        lastlow := low[length]
+        timelow := bar_index
+        //delete line
+        line.delete(trendline)
+        //draw new line
+        trendline := line.new(timehigh - length , lasthigh , timelow - length, lastlow , xloc.bar_index, color = color.purple , width = 2)
+        
+    if (high[length] > lastlow) and (h == high[length])
+        lasthigh := high[length]
+        timehigh := bar_index
+        upward := false
+        //draw line
+        trendline := line.new(timehigh - length , lasthigh , timelow - length, lastlow , xloc.bar_index , color = color.purple , width = 2)
+
+if (not upward)
+    if (high[length] > lasthigh) and (h == high[length])
+        lasthigh := high[length]
+        timehigh := bar_index
+        //delete line
+        line.delete(trendline)
+        //draw new line
+        trendline := line.new(timehigh - length , lasthigh , timelow - length, lastlow , xloc.bar_index, color = color.purple , width = 2)
+        
+    if (low[length] < lasthigh) and (l == low[length])
+        lastlow := low[length]
+        timelow := bar_index
+        upward := true
+        //draw new line
+        trendline := line.new(timehigh - length , lasthigh , timelow - length, lastlow , xloc.bar_index, color = color.purple , width = 2)
+
+
+// plot(upward ? 1.0 : 0.0 , color = color.blue)
+// plot(h , color = color.green)
+// plot(l , color = color.red)

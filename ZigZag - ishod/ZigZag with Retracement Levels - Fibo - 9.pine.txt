@@ -1,0 +1,151 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © PtGambler
+
+// This source code is a modification to 'ZigZag with Fibonacci Levels' published by © LonesomeTheBlue
+
+//@version=5
+indicator('ZigZag with Retracement Levels', overlay=true, max_bars_back=500, max_lines_count=300)
+prd = input.int(defval=10, title='ZigZag Period', minval=2, maxval=50)
+showzigzag = input(defval=true, title='Show Zig Zag')
+showfibo = input(defval=true, title='Show Retracement Ratios')
+labelcol = input(defval=color.white, title='Text Color for Levels')
+fibolinecol = input(defval=color.white, title='Line Color for Levels')
+showcurrent = input(defval=true, title='Show Retracement Ratios based on latest pivot')
+labelcol2 = input(defval=color.yellow, title='Text Color for Current Levels')
+fibolinecol2 = input(defval=color.yellow, title='Line Color for Current Levels')
+upcol = input.color(defval=color.lime, title='Zigzag Colors', inline='zzcol')
+dncol = input.color(defval=color.red, title='', inline='zzcol')
+labelloc = input.string(defval='Left', title='Label Location', options=['Left', 'Right'])
+
+// Modified from © LonesomeTheBlue origial code, added options to enable/disable/customize levels ------------------------------------
+enable1 = input(defval=true, title='Enable Level 1', inline ='level1')
+level1 = input.float(defval=0.236, title='', inline='level1')
+enable2 = input(defval=true, title='Enable Level 2', inline ='level2')
+level2 = input.float(defval=0.382, title='', inline='level2')
+enable3 = input(defval=true, title='Enable Level 3', inline ='level3')
+level3 = input.float(defval=0.500, title='', inline='level3')
+enable4 = input(defval=true, title='Enable Level 4', inline ='level4')
+level4 = input.float(defval=0.618, title='', inline='level4')
+enable5 = input(defval=true, title='Enable Level 5', inline ='level5')
+level5 = input.float(defval=0.786, title='', inline='level5')
+
+var fibo_ratios = array.new_float(0)
+var shownlevels = 1
+if barstate.isfirst
+    array.push(fibo_ratios, 0.0)
+    if enable1
+        array.push(fibo_ratios, level1)
+        shownlevels += 1
+        shownlevels
+    if enable2
+        array.push(fibo_ratios, level2)
+        shownlevels += 1
+        shownlevels
+    if enable3
+        array.push(fibo_ratios, level3)
+        shownlevels += 1
+        shownlevels
+    if enable4
+        array.push(fibo_ratios, level4)
+        shownlevels += 1
+        shownlevels
+    if enable5
+        array.push(fibo_ratios, level5)
+        shownlevels += 1
+        shownlevels
+    // for x = 1 to 5 by 1
+        // array.push(fibo_ratios, x)
+    //     array.push(fibo_ratios, x + 0.272)
+    //     array.push(fibo_ratios, x + 0.414)
+    //     array.push(fibo_ratios, x + 0.618)
+    array.push(fibo_ratios, 1.0)
+// -------------------------------------------------------------------------------
+
+
+float ph = ta.highestbars(high, prd) == 0 ? high : na
+float pl = ta.lowestbars(low, prd) == 0 ? low : na
+var dir = 0
+iff_1 = pl and na(ph) ? -1 : dir
+dir := ph and na(pl) ? 1 : iff_1
+var max_array_size = 10
+var zigzag = array.new_float(0)
+oldzigzag = array.copy(zigzag)
+
+add_to_zigzag(value, bindex) =>
+    array.unshift(zigzag, bindex)
+    array.unshift(zigzag, value)
+    if array.size(zigzag) > max_array_size
+        array.pop(zigzag)
+        array.pop(zigzag)
+
+update_zigzag(value, bindex) =>
+    if array.size(zigzag) == 0
+        add_to_zigzag(value, bindex)
+    else
+        if dir == 1 and value > array.get(zigzag, 0) or dir == -1 and value < array.get(zigzag, 0)
+            array.set(zigzag, 0, value)
+            array.set(zigzag, 1, bindex)
+        0.
+
+bool dirchanged = dir != dir[1]
+if ph or pl
+    if dirchanged
+        add_to_zigzag(dir == 1 ? ph : pl, bar_index)
+    else
+        update_zigzag(dir == 1 ? ph : pl, bar_index)
+
+if showzigzag and array.size(zigzag) >= 4 and array.size(oldzigzag) >= 4
+    var line zzline = na
+    if array.get(zigzag, 0) != array.get(oldzigzag, 0) or array.get(zigzag, 1) != array.get(oldzigzag, 1)
+        if array.get(zigzag, 2) == array.get(oldzigzag, 2) and array.get(zigzag, 3) == math.round(array.get(oldzigzag, 3))
+            line.delete(zzline)
+        zzline := line.new(x1=math.round(array.get(zigzag, 1)), y1=array.get(zigzag, 0), x2=math.round(array.get(zigzag, 3)), y2=array.get(zigzag, 2), color=dir == 1 ? upcol : dncol, width=2)
+        zzline
+
+var fibolines = array.new_line(0)
+var fibolabels = array.new_label(0)
+
+// Addition to © LonesomeTheBlue origial code ------------------------------------
+var fibolines2 = array.new_line(0)
+var fibolabels2 = array.new_label(0)
+// -------------------------------------------------------------------------------
+
+if showfibo and array.size(zigzag) >= 6 and barstate.islast
+    if array.size(fibolines) > 0
+        for x = 0 to array.size(fibolines) - 1 by 1
+            line.delete(array.get(fibolines, x))
+            label.delete(array.get(fibolabels, x))
+    if array.size(fibolines2) > 0
+        for x = 0 to array.size(fibolines2) - 1 by 1
+            line.delete(array.get(fibolines2, x))
+            label.delete(array.get(fibolabels2, x))
+
+    diff = array.get(zigzag, 4) - array.get(zigzag, 2)
+    stopit = false
+    for x = 0 to array.size(fibo_ratios) - 1 by 1
+        if stopit and x > shownlevels
+            break
+        array.unshift(fibolines, line.new(x1=math.round(array.get(zigzag, 5)), y1=array.get(zigzag, 2) + diff * array.get(fibo_ratios, x), x2=bar_index, y2=array.get(zigzag, 2) + diff * array.get(fibo_ratios, x), color=fibolinecol, extend=extend.right, width=2))
+        label_x_loc = labelloc == 'Left' ? math.round(array.get(zigzag, 5)) - 1 : bar_index + 15
+        array.unshift(fibolabels, label.new(x=label_x_loc, y=array.get(zigzag, 2) + diff * array.get(fibo_ratios, x), text=str.tostring(array.get(fibo_ratios, x), '#.###') + '(' + str.tostring(math.round_to_mintick(array.get(zigzag, 2) + diff * array.get(fibo_ratios, x))) + ')', textcolor=labelcol, style=label.style_none))
+        if dir == 1 and array.get(zigzag, 2) + diff * array.get(fibo_ratios, x) > array.get(zigzag, 0) or dir == -1 and array.get(zigzag, 2) + diff * array.get(fibo_ratios, x) < array.get(zigzag, 0)
+            stopit := true
+            stopit
+
+
+
+// Addition to © LonesomeTheBlue origial code ------------------------------------
+if showcurrent and array.size(zigzag) >= 6 and barstate.islast
+    diff2 = array.get(zigzag, 0) - array.get(zigzag, 2)
+    stopit2 = false
+    for x = 0 to array.size(fibo_ratios) - 1 by 1
+        if stopit2 and x > shownlevels
+            break
+        array.unshift(fibolines2, line.new(x1=math.round(array.get(zigzag, 3)), y1=array.get(zigzag, 2) + diff2 * (1-array.get(fibo_ratios, x)), x2=bar_index, y2=array.get(zigzag, 2) + diff2 * (1-array.get(fibo_ratios, x)), color=fibolinecol2, extend=extend.right))
+        label_x_loc2 = labelloc == 'Left' ? math.round(array.get(zigzag, 3)) - 1 : bar_index + 15
+        array.unshift(fibolabels2, label.new(x=label_x_loc2, y=array.get(zigzag, 2) + diff2 * (1-array.get(fibo_ratios, x)), text=str.tostring(array.get(fibo_ratios, x), '#.###') + '(' + str.tostring(math.round_to_mintick(array.get(zigzag, 2) + diff2 * (1-array.get(fibo_ratios, x)))) + ')', textcolor=labelcol2, style=label.style_none))
+        if dir == 1 and array.get(zigzag, 2) + diff2 * array.get(fibo_ratios, x) > array.get(zigzag, 0) or dir == -1 and array.get(zigzag, 2) + diff2 * array.get(fibo_ratios, x) < array.get(zigzag, 0)
+            stopit2 := true
+            stopit2
+    
+// -------------------------------------------------------------------------------

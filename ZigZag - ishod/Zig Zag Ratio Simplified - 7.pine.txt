@@ -1,0 +1,170 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © RozaniGhani-RG
+
+//@version=5
+indicator('Zig Zag Ratio Simplified', 'ZZRS', overlay = true)
+
+// 0. Inputs
+// 1. Variables
+// 2. Switches
+// 3. Custom Functions
+// 4. Calculations
+// 5. Constructs
+
+// ============================================================================= 0.  Inputs {
+T0        = 'Default : 10\nMin : 2\nMax : 50'
+i_i_len   = input.int(          10, 'Length', minval = 2, maxval = 50, tooltip = T0)
+i_s_dir   = input.string(   'Both', 'Show Colored Ratios', options = ['Both', 'Main', 'Sub', 'none'])
+i_b_stat  = input.bool(      false, 'Show Ratio Status')
+i_b_HL    = input.bool(      false, 'Show High Low Labels')
+G1        = 'HELPER'
+T1        = '1) Tick to show table\n2) Small font size recommended for mobile app or multiple layout'
+T2        = 'Table must be tick before change table position'
+i_b_table = input.bool(     false,  'Show Helper |', group = G1, inline = 'Table1')
+i_s_font  = input.string('normal',      'Font size', group = G1, inline = 'Table1', options = ['tiny',  'small', 'normal', 'large', 'huge'], tooltip = T1)
+i_s_Y     = input.string('bottom', 'Table Position', group = G1, inline = 'Table2', options = [ 'top', 'middle', 'bottom'])
+i_s_X     = input.string(  'left',               '', group = G1, inline = 'Table2', options = ['left', 'center', 'right'],                   tooltip = T2)
+// }
+// ============================================================================= 1.  Variables {
+// ————————————————————————————————————————————————————————————————————————————— 1.1 Highest / Lowest {
+float PH = ta.highestbars(high, i_i_len) == 0 ? high : na
+float PL = ta.lowestbars(low,   i_i_len) == 0 ? low  : na
+// }
+// ————————————————————————————————————————————————————————————————————————————— 1.2 Dir {
+var int dir = 0, dir := PL and na(PH) ? -1 : PH and na(PL) ? 1 : dir
+// }
+// ————————————————————————————————————————————————————————————————————————————— 1.3 Bool {
+bool bool_both = dir == -1 or dir == 1, bool bool_pos  = dir ==  1,      bool bool_neg  = dir == -1
+// }
+// ————————————————————————————————————————————————————————————————————————————— 1.4 Array {
+var max_array_size = 10,                 var zigzag = array.new_float(0),  oldzigzag  = array.copy(zigzag)
+// }
+// ————————————————————————————————————————————————————————————————————————————— 1.5 Others {
+var line line_zz        = na, var line line_ratio   = na
+var linefill fill_ratio = na
+var label label_zz      = na, var label label_ratio = na
+var string ratio_true   = na, var string ratio_icon = na, var string str_stat = na
+var float ratio         = na
+var color color_ratio   = na
+var TBL = table.new(i_s_Y + '_' + i_s_X, 2, 5, border_width = 1)
+// }
+// }
+// ============================================================================= 2.  Switches {
+[sw_up, sw_dn] = switch i_b_HL
+    false => [color.new(color.teal, 100), color.new(color.red, 100)]
+    true  => [color.new(color.teal,   0), color.new(color.red,   0)]
+bool_dir = switch i_s_dir
+    'Both' => bool_both
+    'Main' => bool_pos
+    'Sub'  => bool_neg
+// }
+// ============================================================================= 3.  Custom Functions {
+add_to_zigzag(float[] pointer, float value, int bindex) =>
+    array.unshift(pointer, bindex)
+    array.unshift(pointer, value)
+    if array.size(pointer) > max_array_size
+        array.pop(pointer)
+        array.pop(pointer)
+update_zigzag(float[] pointer, float value, int bindex, int dir) =>
+    if array.size(pointer) == 0
+        add_to_zigzag(pointer, value, bindex)
+    else
+        if dir == 1 and value > array.get(pointer, 0) or dir == -1 and value < array.get(pointer, 0)
+            array.set(pointer, 0, value)
+            array.set(pointer, 1, bindex)
+        0.
+calc_ratio(float[] _float) =>
+    math.abs(array.get(_float, 0) - array.get(_float, 2)) / math.abs(array.get(_float, 2) - array.get(_float, 4))
+get_color(float _float) =>
+    _float  >= 0.371 and _float <= 0.930 ? color.red :
+     _float >= 1.130 and _float <= 3.618 ? color.blue :
+     _float >  0.930 and _float <  1.130 ? color.purple :
+     color.gray
+get_stat(float _float) =>
+    _float  >= 0.371 and _float <= 0.930 ? '\nRETRACEMENT'         :
+     _float >= 1.130 and _float <= 3.618 ? '\nPROJECTION'          :
+     _float >  0.930 and _float <  1.130 ? '\nDOUBLE\nTOP\nBOTTOM' :
+     na
+get_icon(float _float) =>
+    _float  >= 0.371 and _float <= 0.930 ? '✅' :
+     _float >= 1.130 and _float <= 3.618 ? '✅' :
+     _float >  0.930 and _float <  1.130 ? '❌' :
+     '❌'
+string_HL(int _int, float[] _float) =>
+    _int == 1 ?
+     array.get(_float, 0) > array.get(_float, 4) ? 'HH' : 'LH' :
+     array.get(_float, 0) < array.get(_float, 4) ? 'LL' : 'HL'
+line_HL(int _int, float[] _float) =>
+    _int == 1 ?
+     array.get(_float, 0) > array.get(_float, 2) ? color.teal : color.red :
+     array.get(_float, 0) < array.get(_float, 2) ? color.red  : color.teal
+switch_color(int _int, float[] _float) =>
+    _int == 1 ?
+     array.get(_float, 0) > array.get(_float, 4) ? sw_up : sw_dn :
+     array.get(_float, 0) < array.get(_float, 4) ? sw_dn : sw_up
+row_text(int _column, int _row, string _str1, string _str2, color _color) =>
+    table.cell(TBL, _column,     _row, _str1, text_color = color.white, bgcolor = _color, text_size = i_s_font)
+    table.cell(TBL, _column + 1, _row, _str2, text_color = color.white, bgcolor = _color, text_size = i_s_font)
+// }
+// ============================================================================= 4.  Calculations {
+dirchanged = ta.change(dir)
+if PH or PL
+    if dirchanged
+        add_to_zigzag(zigzag, dir == 1 ? PH : PL, bar_index)
+    else
+        update_zigzag(zigzag, dir == 1 ? PH : PL, bar_index, dir)
+// }
+// ============================================================================= 5.  Constructs {
+if array.size(zigzag) >= 6
+    if array.get(zigzag, 0) != array.get(oldzigzag, 0) or array.get(zigzag, 1) != array.get(oldzigzag, 1)
+        if array.get(zigzag, 2) == array.get(oldzigzag, 2) and array.get(zigzag, 3) == array.get(oldzigzag, 3)
+            line.delete(line_zz)
+            line.delete(line_ratio)
+            label.delete(label_zz)
+            label.delete(label_ratio)
+        line_zz    := line.new(
+                             x1    = math.round(array.get(zigzag, 1)),
+                             y1    =            array.get(zigzag, 0),
+                             x2    = math.round(array.get(zigzag, 3)),
+                             y2    =            array.get(zigzag, 2),
+                             color = dir == 1 ? color.teal : color.red,
+                             width = 2)
+        line_ratio := line.new(
+                             x1    = math.round(array.get(zigzag, 1)),
+                             y1    =            array.get(zigzag, 0),
+                             x2    = math.round(array.get(zigzag, 5)),
+                             y2    =            array.get(zigzag, 4),
+                             color = color.new(color.blue, 100))
+        fcol       = line_HL(     1, zigzag)
+        text_HL    = string_HL(   1, zigzag)
+        txtcol     = switch_color(1, zigzag)
+        label_zz  := label.new(
+                                 x         = math.round(array.get(zigzag, 1)),
+                                 y         =            array.get(zigzag, 0),
+                                 text      = text_HL,
+                                 color     = color.new(color.blue, 100),
+                                 textcolor = txtcol,
+                                 style     = dir == 1 ? label.style_label_down : label.style_label_up)
+        ratio       := calc_ratio(zigzag)
+        color_ratio := get_color(ratio)
+        ratio_true  := get_stat(ratio)
+        ratio_icon  := get_icon(ratio)
+        str_stat    := i_b_stat ? ratio_true : na
+        label_ratio := label.new(
+                             x         = math.round(array.get(zigzag, 3)),
+                             y         = math.avg(  array.get(zigzag, 0), array.get(zigzag, 4)),
+                             text      = str.tostring(ratio, '0.000 ') + ratio_icon + str_stat,
+                             color     = color.new(color.blue, 100),
+                             textcolor = color_ratio,
+                             style     = label.style_label_center,
+                             tooltip   = str.tostring(ratio, '0.000 ') + ratio_icon + ratio_true)
+        if bool_dir
+            fill_ratio := linefill.new(line_zz, line_ratio, color.new(color_ratio, 85))
+        else
+            fill_ratio := linefill.new(line_zz, line_ratio, color.new(color_ratio, 100))
+if barstate.islast
+    if i_b_table
+        row_text(0, 0,         'RETRACEMENT', '0.371 <= PRICE <= 0.930', color.red)
+        row_text(0, 1,          'PROJECTION', '1.130 <= PRICE <= 3.618', color.blue)
+        row_text(0, 2, 'DOUBLE TOP / BOTTOM',   '0.930 < PRICE < 1.130', color.purple)
+// }

@@ -1,0 +1,374 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © HeWhoMustNotBeNamed
+
+//   __    __            __       __  __                  __       __                        __      __    __              __      _______             __    __                                          __ 
+//  /  |  /  |          /  |  _  /  |/  |                /  \     /  |                      /  |    /  \  /  |            /  |    /       \           /  \  /  |                                        /  |
+//  $$ |  $$ |  ______  $$ | / \ $$ |$$ |____    ______  $$  \   /$$ | __    __   _______  _$$ |_   $$  \ $$ |  ______   _$$ |_   $$$$$$$  |  ______  $$  \ $$ |  ______   _____  ____    ______    ____$$ |
+//  $$ |__$$ | /      \ $$ |/$  \$$ |$$      \  /      \ $$$  \ /$$$ |/  |  /  | /       |/ $$   |  $$$  \$$ | /      \ / $$   |  $$ |__$$ | /      \ $$$  \$$ | /      \ /     \/    \  /      \  /    $$ |
+//  $$    $$ |/$$$$$$  |$$ /$$$  $$ |$$$$$$$  |/$$$$$$  |$$$$  /$$$$ |$$ |  $$ |/$$$$$$$/ $$$$$$/   $$$$  $$ |/$$$$$$  |$$$$$$/   $$    $$< /$$$$$$  |$$$$  $$ | $$$$$$  |$$$$$$ $$$$  |/$$$$$$  |/$$$$$$$ |
+//  $$$$$$$$ |$$    $$ |$$ $$/$$ $$ |$$ |  $$ |$$ |  $$ |$$ $$ $$/$$ |$$ |  $$ |$$      \   $$ | __ $$ $$ $$ |$$ |  $$ |  $$ | __ $$$$$$$  |$$    $$ |$$ $$ $$ | /    $$ |$$ | $$ | $$ |$$    $$ |$$ |  $$ |
+//  $$ |  $$ |$$$$$$$$/ $$$$/  $$$$ |$$ |  $$ |$$ \__$$ |$$ |$$$/ $$ |$$ \__$$ | $$$$$$  |  $$ |/  |$$ |$$$$ |$$ \__$$ |  $$ |/  |$$ |__$$ |$$$$$$$$/ $$ |$$$$ |/$$$$$$$ |$$ | $$ | $$ |$$$$$$$$/ $$ \__$$ |
+//  $$ |  $$ |$$       |$$$/    $$$ |$$ |  $$ |$$    $$/ $$ | $/  $$ |$$    $$/ /     $$/   $$  $$/ $$ | $$$ |$$    $$/   $$  $$/ $$    $$/ $$       |$$ | $$$ |$$    $$ |$$ | $$ | $$ |$$       |$$    $$ |
+//  $$/   $$/  $$$$$$$/ $$/      $$/ $$/   $$/  $$$$$$/  $$/      $$/  $$$$$$/  $$$$$$$/     $$$$/  $$/   $$/  $$$$$$/     $$$$/  $$$$$$$/   $$$$$$$/ $$/   $$/  $$$$$$$/ $$/  $$/  $$/  $$$$$$$/  $$$$$$$/ 
+//                                                                                                                                                                                                          
+//                                                                                                                                                                                                          
+//
+//@version=5
+indicator('Multi-ZigZag Multi-Oscillator Trend Detector', shorttitle='MZigZag-MOscillator-Trend-Detector', overlay=true, max_bars_back=1000, max_lines_count=500, max_labels_count=500)
+
+useAlternativeSource = input.bool(true, title='', group='Source', inline='src')
+source = input.source(close, title='Alternative Source', group='Source', inline='src')
+max_array_size = input.int(10, step=20, title='History', group='Source', inline='src')
+
+table_position = input.string(position.middle_center, title='Position', group='Table', options=[position.top_left, position.top_right, position.top_center, position.middle_left, position.middle_right, position.middle_center, position.bottom_left, position.bottom_right, position.bottom_center])
+text_size = input.string(size.tiny, title='Size', group='Table', options=[size.tiny, size.small, size.normal, size.large, size.huge, size.auto])
+
+supertrendHistory = input.int(4, step=1, title='Pivot History', group='Zigzag Supertrend')
+atrPeriods = input.int(22, title='ATR Length', step=5, group='Zigzag Supertrend')
+atrMult = input.float(1, step=0.5, title='ATR Multiplier', group='Zigzag Supertrend')
+
+oscMultiplier = input.int(4, title='Length Multiplier', group='Oscillator', inline='osc')
+zigzag1Length = input.int(5, step=1, minval=3, title='Zigzag', group='Zigzag', inline='z')
+zigzag2Length = input.int(8, step=1, minval=2, title='', group='Zigzag', inline='z')
+zigzag3Length = input.int(13, step=1, minval=2, title='', group='Zigzag', inline='z')
+zigzag4Length = input.int(21, step=1, minval=2, title='', group='Zigzag', inline='z')
+
+var numberOfZigzags = 4
+var numberOfOscillators = 8
+var oscillatorValues = array.new_float(numberOfOscillators * numberOfZigzags, 0)
+
+f_get_oscillator_index(oscillatorSource, zigzagLength) =>
+    zigzagIndex = zigzagLength == zigzag1Length ? 0 : zigzagLength == zigzag2Length ? 1 : zigzagLength == zigzag3Length ? 2 : 3
+    numberOfItems = numberOfOscillators
+    startIndex = zigzagIndex * numberOfItems
+    oscillatorIndex = oscillatorSource == 'CCI' ? 0 : oscillatorSource == 'CMO' ? 1 : oscillatorSource == 'COG' ? 2 : oscillatorSource == 'MFI' ? 3 : oscillatorSource == 'ROC' ? 4 : oscillatorSource == 'RSI' ? 5 : oscillatorSource == 'WPR' ? 6 : oscillatorSource == 'BB' ? 7 : 6
+    startIndex + oscillatorIndex
+
+f_initialize_oscillators(zigzagLength) =>
+    oscillatorLength = zigzagLength * oscMultiplier
+    [bbmiddle, bbupper, bblower] = ta.bb(close, oscillatorLength, 5)
+
+    cci = ta.cci(close, oscillatorLength)
+    cmo = ta.cmo(close, oscillatorLength)
+    cog = ta.cog(close, oscillatorLength)
+    mfi = ta.mfi(close, oscillatorLength)
+    roc = ta.roc(close, oscillatorLength)
+    rsi = ta.rsi(close, oscillatorLength)
+    wpr = ta.wpr(oscillatorLength)
+    bbr = (close - bblower) * 100 / (bbupper - bblower)
+
+    array.set(oscillatorValues, f_get_oscillator_index('CCI', zigzagLength), cci)
+    array.set(oscillatorValues, f_get_oscillator_index('CMO', zigzagLength), cmo)
+    array.set(oscillatorValues, f_get_oscillator_index('COG', zigzagLength), cog)
+    array.set(oscillatorValues, f_get_oscillator_index('MFI', zigzagLength), mfi)
+    array.set(oscillatorValues, f_get_oscillator_index('ROC', zigzagLength), roc)
+    array.set(oscillatorValues, f_get_oscillator_index('RSI', zigzagLength), rsi)
+    array.set(oscillatorValues, f_get_oscillator_index('WPR', zigzagLength), wpr)
+    array.set(oscillatorValues, f_get_oscillator_index('BB', zigzagLength), bbr)
+
+f_initialize_oscillators(zigzag1Length)
+f_initialize_oscillators(zigzag2Length)
+f_initialize_oscillators(zigzag3Length)
+f_initialize_oscillators(zigzag4Length)
+
+f_get_oscillators_by_length_and_type(oscillatorSource, zigzagLength) =>
+    array.get(oscillatorValues, f_get_oscillator_index(oscillatorSource, zigzagLength))
+
+f_get_oscullators_by_length(zigzagLength) =>
+    zigzagIndex = zigzagLength == zigzag1Length ? 0 : zigzagLength == zigzag2Length ? 1 : zigzagLength == zigzag3Length ? 2 : 3
+    startIndex = zigzagIndex * numberOfOscillators
+    array.slice(oscillatorValues, startIndex, startIndex + numberOfOscillators)
+
+var zigzagpivots1 = array.new_float(0)
+var zigzagpivotbars1 = array.new_int(0)
+var zigzagpivotdirs1 = array.new_int(0)
+var zigzagoscdirs1 = array.new_int(0)
+var zigzagosc1 = array.new_float(0)
+var zigzagtrend1 = array.new_int(0)
+
+var zigzagpivots2 = array.new_float(0)
+var zigzagpivotbars2 = array.new_int(0)
+var zigzagpivotdirs2 = array.new_int(0)
+var zigzagoscdirs2 = array.new_int(0)
+var zigzagosc2 = array.new_float(0)
+var zigzagtrend2 = array.new_int(0)
+
+var zigzagpivots3 = array.new_float(0)
+var zigzagpivotbars3 = array.new_int(0)
+var zigzagpivotdirs3 = array.new_int(0)
+var zigzagoscdirs3 = array.new_int(0)
+var zigzagosc3 = array.new_float(0)
+var zigzagtrend3 = array.new_int(0)
+
+var zigzagpivots4 = array.new_float(0)
+var zigzagpivotbars4 = array.new_int(0)
+var zigzagpivotdirs4 = array.new_int(0)
+var zigzagoscdirs4 = array.new_int(0)
+var zigzagosc4 = array.new_float(0)
+var zigzagtrend4 = array.new_int(0)
+
+var zigzag1lines = array.new_line(0)
+var zigzag2lines = array.new_line(0)
+var zigzag3lines = array.new_line(0)
+var zigzag4lines = array.new_line(0)
+
+var zigzag1labels = array.new_label(0)
+var zigzag2labels = array.new_label(0)
+var zigzag3labels = array.new_label(0)
+var zigzag4labels = array.new_label(0)
+
+var zigzagsupertrenddirs = array.new_int(numberOfZigzags, 1)
+var zigzagsupertrend = array.new_float(numberOfOscillators, na)
+
+f_get_zigzag_arrays(zigzagLength) =>
+    zigzagPivots = zigzagLength == zigzag1Length ? zigzagpivots1 : zigzagLength == zigzag2Length ? zigzagpivots2 : zigzagLength == zigzag3Length ? zigzagpivots3 : zigzagpivots4
+    zigzagPivotBars = zigzagLength == zigzag1Length ? zigzagpivotbars1 : zigzagLength == zigzag2Length ? zigzagpivotbars2 : zigzagLength == zigzag3Length ? zigzagpivotbars3 : zigzagpivotbars4
+    zigzagPivotDirs = zigzagLength == zigzag1Length ? zigzagpivotdirs1 : zigzagLength == zigzag2Length ? zigzagpivotdirs2 : zigzagLength == zigzag3Length ? zigzagpivotdirs3 : zigzagpivotdirs4
+    zigzagOscillators = zigzagLength == zigzag1Length ? zigzagosc1 : zigzagLength == zigzag2Length ? zigzagosc2 : zigzagLength == zigzag3Length ? zigzagosc3 : zigzagosc4
+    zigzagOscDirs = zigzagLength == zigzag1Length ? zigzagoscdirs1 : zigzagLength == zigzag2Length ? zigzagoscdirs2 : zigzagLength == zigzag3Length ? zigzagoscdirs3 : zigzagoscdirs4
+    zigzagTrend = zigzagLength == zigzag1Length ? zigzagtrend1 : zigzagLength == zigzag2Length ? zigzagtrend2 : zigzagLength == zigzag3Length ? zigzagtrend3 : zigzagtrend4
+
+    [zigzagPivots, zigzagPivotBars, zigzagPivotDirs, zigzagOscillators, zigzagOscDirs, zigzagTrend]
+
+f_get_zigzag_drawings(zigzagLength) =>
+    zigzagLines = zigzagLength == zigzag1Length ? zigzag1lines : zigzagLength == zigzag2Length ? zigzag2lines : zigzagLength == zigzag3Length ? zigzag3lines : zigzag4lines
+    zigzagLabels = zigzagLength == zigzag1Length ? zigzag1labels : zigzagLength == zigzag2Length ? zigzag2labels : zigzagLength == zigzag3Length ? zigzag3labels : zigzag4labels
+    [zigzagLines, zigzagLabels]
+
+add_to_array(arr, val, maxItems) =>
+    array.unshift(arr, val)
+    if array.size(arr) > maxItems
+        array.pop(arr)
+
+pivots(length) =>
+    highsource = useAlternativeSource ? source : high
+    lowsource = useAlternativeSource ? source : low
+    float phigh = ta.highestbars(highsource, length) == 0 ? highsource : na
+    float plow = ta.lowestbars(lowsource, length) == 0 ? lowsource : na
+    [phigh, plow, bar_index, bar_index]
+
+add_oscillators(zigzagLength, currentBarOffset, lastBarOffset, dir) =>
+    [zigzagPivots, zigzagPivotBars, zigzagPivotDirs, zigzagOscillators, zigzagOscDirs, zigzagTrend] = f_get_zigzag_arrays(zigzagLength)
+    oscillators = f_get_oscullators_by_length(zigzagLength)
+    for i = 0 to array.size(oscillators) > 0 ? array.size(oscillators) - 1 : na by 1
+        index = array.size(oscillators) - 1 - i
+        osc = array.get(oscillators, index)
+        currentValue = osc[currentBarOffset]
+        lastValue = osc[lastBarOffset]
+        newDir = dir * currentValue > dir * lastValue ? dir * 2 : dir
+        add_to_array(zigzagOscillators, currentValue, max_array_size * numberOfOscillators)
+        add_to_array(zigzagOscDirs, newDir, max_array_size * numberOfOscillators)
+
+delete_oscillators(zigzagLength) =>
+    [zigzagPivots, zigzagPivotBars, zigzagPivotDirs, zigzagOscillators, zigzagOscDirs, zigzagTrend] = f_get_zigzag_arrays(zigzagLength)
+    for i = 1 to numberOfOscillators by 1
+        array.shift(zigzagOscillators)
+        array.shift(zigzagOscDirs)
+
+addnewpivot(zigzagLength, value, bar, dir) =>
+    newDir = dir
+    [zigzagPivots, zigzagPivotBars, zigzagPivotDirs, zigzagOscillators, zigzagOscDirs, zigzagTrend] = f_get_zigzag_arrays(zigzagLength)
+    currentBarOffset = bar_index - bar
+    lastBarOffset = bar_index - bar
+
+    if array.size(zigzagPivots) >= 2
+        lastPoint = array.get(zigzagPivots, 1)
+        lastBar = array.get(zigzagPivotBars, 1)
+        newDir := dir * value > dir * lastPoint ? dir * 2 : dir
+        lastBarOffset := bar_index - lastBar
+        lastBarOffset
+
+    zigzagIndex = zigzagLength == zigzag1Length ? 0 : zigzagLength == zigzag2Length ? 1 : zigzagLength == zigzag3Length ? 2 : 3
+    supetrendDir = array.get(zigzagsupertrenddirs, zigzagIndex)
+
+    add_to_array(zigzagPivots, value, max_array_size)
+    add_to_array(zigzagPivotBars, bar, max_array_size)
+    add_to_array(zigzagPivotDirs, newDir, max_array_size)
+    add_to_array(zigzagTrend, supetrendDir[currentBarOffset], max_array_size)
+    add_oscillators(zigzagLength, currentBarOffset, lastBarOffset, dir)
+
+zigzagcore(zigzagLength, phigh, plow, phighbar, plowbar) =>
+    pDir = 1
+    newZG = false
+    doubleZG = phigh and plow
+    [zigzagPivots, zigzagPivotBars, zigzagPivotDirs, zigzagOscillators, zigzagOscDirs, zigzagTrend] = f_get_zigzag_arrays(zigzagLength)
+    if array.size(zigzagPivots) >= 1
+        pDir := array.get(zigzagPivotDirs, 0)
+        pDir := pDir % 2 == 0 ? pDir / 2 : pDir
+        pDir
+
+    if (pDir == 1 and phigh or pDir == -1 and plow) and array.size(zigzagPivots) >= 1
+        pivot = array.shift(zigzagPivots)
+        pivotbar = array.shift(zigzagPivotBars)
+        pivotdir = array.shift(zigzagPivotDirs)
+        supertrendDir = array.shift(zigzagTrend)
+        delete_oscillators(zigzagLength)
+        value = pDir == 1 ? phigh : plow
+        bar = pDir == 1 ? phighbar : plowbar
+
+        useNewValues = value * pivotdir > pivot * pivotdir
+        value := useNewValues ? value : pivot
+        bar := useNewValues ? bar : pivotbar
+        newZG := newZG or useNewValues
+        addnewpivot(zigzagLength, value, bar, pDir)
+
+    if pDir == 1 and plow or pDir == -1 and phigh
+        value = pDir == 1 ? plow : phigh
+        bar = pDir == 1 ? plowbar : phighbar
+        dir = pDir == 1 ? -1 : 1
+        newZG := true
+        addnewpivot(zigzagLength, value, bar, dir)
+    [newZG, doubleZG]
+
+zigzag(zigzagLength) =>
+    [phigh, plow, phighbar, plowbar] = pivots(zigzagLength)
+    zigzagcore(zigzagLength, phigh, plow, phighbar, plowbar)
+
+f_initialize_supertrend(zigzagLength) =>
+    [zigzagPivots, zigzagPivotBars, zigzagPivotDirs, zigzagOscillators, zigzagOscDirs, zigzagTrend] = f_get_zigzag_arrays(zigzagLength)
+    zigzagIndex = zigzagLength == zigzag1Length ? 0 : zigzagLength == zigzag2Length ? 1 : zigzagLength == zigzag3Length ? 2 : 3
+    dir = array.get(zigzagsupertrenddirs, zigzagIndex)
+    buyStop = array.get(zigzagsupertrend, zigzagIndex * 2)
+    sellStop = array.get(zigzagsupertrend, zigzagIndex * 2 + 1)
+    tail = array.size(zigzagPivots) > 1 + supertrendHistory ? array.slice(zigzagPivots, 1, 1 + supertrendHistory) : array.new_float()
+    highest = array.max(tail)
+    lowest = array.min(tail)
+    atrDiff = ta.atr(atrPeriods) * atrMult
+    newBuyStop = lowest - atrDiff
+    newSellStop = highest + atrDiff
+    newDir = dir > 0 and close[1] < buyStop ? -1 : dir < 0 and close[1] > sellStop ? 1 : dir
+    newBuyStop := newDir > 0 ? math.max(nz(buyStop, newBuyStop), newBuyStop) : newBuyStop
+    newSellStop := newDir < 0 ? math.min(nz(sellStop, newSellStop), newSellStop) : newSellStop
+    array.set(zigzagsupertrenddirs, zigzagIndex, newDir)
+    array.set(zigzagsupertrend, zigzagIndex * 2, newBuyStop)
+    array.set(zigzagsupertrend, zigzagIndex * 2 + 1, newSellStop)
+    [newDir, newBuyStop, newSellStop]
+
+getSentiment(pDir, oDir, sDir) =>
+    sentiment = pDir == oDir ? sDir == pDir or sDir * 2 == -pDir ? -sDir : sDir * 4 : sDir == pDir or sDir == -oDir ? 0 : (math.abs(oDir) > math.abs(pDir) ? sDir : -sDir) * (sDir == oDir ? 2 : 3)
+    sentiment
+
+getSentimentDetails(sentiment) =>
+    sentimentSymbol = sentiment == 4 ? '⬆' : sentiment == -4 ? '⬇' : sentiment == 3 ? '↗' : sentiment == -3 ? '↘' : sentiment == 2 ? '⤴' : sentiment == -2 ? '⤵' : sentiment == 1 ? '⤒' : sentiment == -1 ? '⤓' : '▣'
+    sentimentColor = sentiment == 4 ? color.green : sentiment == -4 ? color.red : sentiment == 3 ? color.lime : sentiment == -3 ? color.orange : sentiment == 2 ? color.rgb(202, 224, 13, 0) : sentiment == -2 ? color.rgb(250, 128, 114, 0) : color.silver
+    sentimentLabel = math.abs(sentiment) == 4 ? 'C' : math.abs(sentiment) == 3 ? 'H' : math.abs(sentiment) == 2 ? 'D' : 'I'
+    [sentimentSymbol, sentimentLabel, sentimentColor]
+
+getCellColorByDirection(dir) =>
+    dir == 2 ? color.green : dir == 1 ? color.orange : dir == -1 ? color.lime : dir == -2 ? color.red : color.silver
+getLabelByDirection(dir) =>
+    dir == 2 ? '⇈' : dir == 1 ? '↑' : dir == -1 ? '↓' : dir == -2 ? '⇊' : 'NA'
+
+f_add_header(tableId, header, columnStart, valueText, trendText) =>
+    table.cell(table_id=tableId, column=columnStart, row=0, text=header, bgcolor=color.black, text_color=color.white, text_size=text_size)
+    table.cell(table_id=tableId, column=columnStart, row=1, text=valueText, bgcolor=color.black, text_color=color.white, text_size=text_size)
+    table.cell(table_id=tableId, column=columnStart + 1, row=1, text='Direction', bgcolor=color.black, text_color=color.white, text_size=text_size)
+    table.cell(table_id=tableId, column=columnStart + 2, row=1, text=trendText, bgcolor=color.black, text_color=color.white, text_size=text_size)
+    columnStart + 3
+
+f_add_oscillator_columns(tableId, columnStart, zigzagRow, rowIndex, zigzagLength, oscillatorIndex, pDir, sDir) =>
+    [zigzagPivots, zigzagPivotBars, zigzagPivotDirs, zigzagOscillators, zigzagOscDirs, zigzagTrend] = f_get_zigzag_arrays(zigzagLength)
+    index = numberOfOscillators * zigzagRow + oscillatorIndex
+    oValue = array.get(zigzagOscillators, index)
+    oDir = array.get(zigzagOscDirs, index)
+    sentiment = getSentiment(pDir, oDir, sDir)
+    [sentimentSymbol, sentimentLabel, sentimentColor] = getSentimentDetails(sentiment)
+    table.cell(table_id=tableId, column=columnStart, row=rowIndex, text=str.tostring(math.round(oValue, 2)), bgcolor=getCellColorByDirection(oDir), text_size=text_size)
+    table.cell(table_id=tableId, column=columnStart + 1, row=rowIndex, text=getLabelByDirection(oDir), bgcolor=getCellColorByDirection(oDir), text_size=text_size)
+    table.cell(table_id=tableId, column=columnStart + 2, row=rowIndex, text=sentimentSymbol, bgcolor=sentimentColor, text_size=text_size)
+    columnStart + 3
+
+f_add_zigzag_oscillator_data(tableId, zigzagLength, currentRow, zgIndex) =>
+    [zigzagPivots, zigzagPivotBars, zigzagPivotDirs, zigzagOscillators, zigzagOscDirs, zigzagTrend] = f_get_zigzag_arrays(zigzagLength)
+    pDir = array.get(zigzagPivotDirs, zgIndex)
+    sDir = array.get(zigzagTrend, zgIndex)
+    trendDirection = sDir > 0 ? '⇑' : '⇓'
+    trendColor = sDir > 0 ? color.green : color.red
+    table.cell(table_id=tableId, column=2, row=currentRow, text=str.tostring(zigzagLength), bgcolor=getCellColorByDirection(pDir), text_size=text_size)
+    table.cell(table_id=tableId, column=3, row=currentRow, text=getLabelByDirection(pDir), bgcolor=getCellColorByDirection(pDir), text_size=text_size)
+    table.cell(table_id=tableId, column=4, row=currentRow, text=trendDirection, bgcolor=trendColor, text_size=text_size)
+    columnStart = 5
+    columnStart := f_add_oscillator_columns(tableId, columnStart, zgIndex, currentRow, zigzagLength, 0, pDir, sDir)
+    columnStart := f_add_oscillator_columns(tableId, columnStart, zgIndex, currentRow, zigzagLength, 1, pDir, sDir)
+    columnStart := f_add_oscillator_columns(tableId, columnStart, zgIndex, currentRow, zigzagLength, 2, pDir, sDir)
+    if not na(volume)
+        columnStart := f_add_oscillator_columns(tableId, columnStart, zgIndex, currentRow, zigzagLength, 3, pDir, sDir)
+        columnStart
+    columnStart := f_add_oscillator_columns(tableId, columnStart, zgIndex, currentRow, zigzagLength, 4, pDir, sDir)
+    columnStart := f_add_oscillator_columns(tableId, columnStart, zgIndex, currentRow, zigzagLength, 5, pDir, sDir)
+    columnStart := f_add_oscillator_columns(tableId, columnStart, zgIndex, currentRow, zigzagLength, 6, pDir, sDir)
+    columnStart := f_add_oscillator_columns(tableId, columnStart, zgIndex, currentRow, zigzagLength, 7, pDir, sDir)
+    currentRow + 1
+
+f_add_zigzag_oscillator_sub_data(tableId, zigzagLength, pBar, price, currentRow, zgIndex) =>
+    [zigzagPivots, zigzagPivotBars, zigzagPivotDirs, zigzagOscillators, zigzagOscDirs, zigzagTrend] = f_get_zigzag_arrays(zigzagLength)
+    zBar = array.get(zigzagPivotBars, zgIndex)
+    zPrice = array.get(zigzagPivots, zgIndex)
+    zgIndexNew = zgIndex
+    currentRowNew = currentRow
+    if zBar == pBar and zPrice == price
+        zgIndexNew := zgIndex + 1
+        currentRowNew := f_add_zigzag_oscillator_data(tableId, zigzagLength, currentRow, zgIndex)
+        currentRowNew
+    [zgIndexNew, currentRowNew]
+
+
+[level1ZG, doublel1ZG] = zigzag(zigzag1Length)
+[level2ZG, doublel2ZG] = zigzag(zigzag2Length)
+[level3ZG, doublel3ZG] = zigzag(zigzag3Length)
+[level4ZG, doublel4ZG] = zigzag(zigzag4Length)
+
+[z1Dir, z1BuyStop, z1SellStop] = f_initialize_supertrend(zigzag1Length)
+[z2Dir, z2BuyStop, z2SellStop] = f_initialize_supertrend(zigzag2Length)
+[z3Dir, z3BuyStop, z3SellStop] = f_initialize_supertrend(zigzag3Length)
+[z4Dir, z4BuyStop, z4SellStop] = f_initialize_supertrend(zigzag4Length)
+
+startIndex = 0
+zg2Index = 0
+zg3Index = 0
+zg4Index = 0
+if barstate.islast
+    stats = table.new(position=table_position, columns=numberOfOscillators * 3 + 5, rows=max_array_size * numberOfZigzags + startIndex + 3, border_width=1)
+    var altTextSize = text_size == size.tiny ? size.small : text_size == size.small ? size.normal : text_size == size.normal ? size.large : text_size == size.large ? size.huge : size.large
+    table.cell(table_id=stats, column=0, row=0, text=syminfo.ticker, bgcolor=color.teal, text_color=color.white, text_size=altTextSize)
+    table.cell(table_id=stats, column=1, row=0, text=timeframe.period, bgcolor=color.teal, text_color=color.white, text_size=altTextSize)
+
+    table.cell(table_id=stats, column=0, row=1, text='Bar Time', bgcolor=color.black, text_color=color.white, text_size=text_size)
+    table.cell(table_id=stats, column=1, row=1, text='Price', bgcolor=color.black, text_color=color.white, text_size=text_size)
+
+    headerIndex = 2
+    headerIndex := f_add_header(stats, 'Zigzag', headerIndex, 'Length', 'Trend')
+    headerIndex := f_add_header(stats, 'CCI', headerIndex, 'Value', 'Sentiment')
+    headerIndex := f_add_header(stats, 'CMO', headerIndex, 'Value', 'Sentiment')
+    headerIndex := f_add_header(stats, 'COG', headerIndex, 'Value', 'Sentiment')
+    if not na(volume)
+        headerIndex := f_add_header(stats, 'MFI', headerIndex, 'Value', 'Sentiment')
+        headerIndex
+    headerIndex := f_add_header(stats, 'ROC', headerIndex, 'Value', 'Sentiment')
+    headerIndex := f_add_header(stats, 'RSI', headerIndex, 'Value', 'Sentiment')
+    headerIndex := f_add_header(stats, 'WPR', headerIndex, 'Value', 'Sentiment')
+    headerIndex := f_add_header(stats, 'BB', headerIndex, 'Value', 'Sentiment')
+
+    currentRow = 2
+    for i = startIndex to array.size(zigzagpivotdirs1) > 0 ? array.size(zigzagpivotdirs1) - 1 : na by 1
+        pBar = array.get(zigzagpivotbars1, i)
+        price = array.get(zigzagpivots1, i)
+
+        barTime = time[bar_index - pBar]
+        barTimeString = str.tostring(year(barTime), '0000') + '/' + str.tostring(month(barTime), '00') + '/' + str.tostring(dayofmonth(barTime), '00') + (timeframe.isintraday ? '-' + str.tostring(hour(barTime), '00') + ':' + str.tostring(minute(barTime), '00') + ':' + str.tostring(second(barTime), '00') : '')
+        table.cell(table_id=stats, column=0, row=currentRow, text=barTimeString, bgcolor=color.maroon, text_color=color.white, text_size=text_size)
+        table.cell(table_id=stats, column=1, row=currentRow, text=str.tostring(math.round(price, 2)), bgcolor=color.maroon, text_color=color.white, text_size=text_size)
+
+        currentRow := f_add_zigzag_oscillator_data(stats, zigzag1Length, currentRow, i)
+        [zgIndex2New, currentRow2New] = f_add_zigzag_oscillator_sub_data(stats, zigzag2Length, pBar, price, currentRow, zg2Index)
+        zg2Index := zgIndex2New
+        currentRow := currentRow2New
+        [zgIndex3New, currentRow3New] = f_add_zigzag_oscillator_sub_data(stats, zigzag3Length, pBar, price, currentRow, zg3Index)
+        zg3Index := zgIndex3New
+        currentRow := currentRow3New
+        [zgIndex4New, currentRow4New] = f_add_zigzag_oscillator_sub_data(stats, zigzag4Length, pBar, price, currentRow, zg4Index)
+        zg4Index := zgIndex4New
+        currentRow := currentRow4New
+        currentRow
+
+
